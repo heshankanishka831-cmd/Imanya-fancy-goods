@@ -1,8 +1,16 @@
 export const formatCurrency = (val: number): string => {
+  const rounded = Math.round(val || 0);
   return 'Rs. ' + new Intl.NumberFormat('en-LK', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(val || 0);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(rounded);
+};
+
+export const formatInteger = (val: number): string => {
+  const rounded = Math.round(val || 0);
+  return new Intl.NumberFormat('en-LK', {
+    maximumFractionDigits: 0,
+  }).format(rounded);
 };
 
 export const formatDate = (dateStr: string): string => {

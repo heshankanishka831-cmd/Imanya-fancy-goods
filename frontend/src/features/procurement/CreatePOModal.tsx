@@ -158,10 +158,11 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 <div className="w-full sm:w-32">
                   <input
                     type="number"
-                    step="0.01"
-                    placeholder="Cost"
+                    step="1"
+                    min="0"
+                    placeholder="Cost (Rs.)"
                     value={it.unit_cost}
-                    onChange={(e) => updateItem(idx, 'unit_cost', parseFloat(e.target.value) || 0)}
+                    onChange={(e) => updateItem(idx, 'unit_cost', Math.round(Number(e.target.value)) || 0)}
                     className="w-full rounded-md border border-gray-300 p-1.5 text-xs text-gray-900"
                   />
                 </div>

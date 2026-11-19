@@ -4,7 +4,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { adminApi } from '../../services/endpoints';
 import { ProductAdmin, Category } from '../../types';
-import { Plus, Check, Sparkles, AlertCircle } from 'lucide-react';
+import { AlertCircle, Tag, Sparkles } from 'lucide-react';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -24,8 +24,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onCategoriesChange,
 }) => {
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
+  const [categoryName, setCategoryName] = useState<string>('');
   const [formData, setFormData] = useState({
-    category_id: 1,
     sku: '',
     name: '',
     description: '',
@@ -41,33 +41,28 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Quick category creation state
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const [quickCategoryName, setQuickCategoryName] = useState('');
-  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
-  const [categoryError, setCategoryError] = useState<string | null>(null);
-
   useEffect(() => {
     setLocalCategories(categories);
   }, [categories]);
 
   useEffect(() => {
     if (productToEdit) {
+      const currentCat = localCategories.find((c) => c.id === productToEdit.category_id);
+      setCategoryName(currentCat?.name || '');
       setFormData({
-        category_id: productToEdit.category_id,
         sku: productToEdit.sku,
         name: productToEdit.name,
         description: productToEdit.description || '',
         unit_of_measure: productToEdit.unit_of_measure,
-        selling_price: productToEdit.selling_price,
-        cost_price: productToEdit.cost_price || 0,
-        initial_stock: productToEdit.current_stock || 0,
-        low_stock_threshold: productToEdit.low_stock_threshold || 5,
+        selling_price: Math.round(productToEdit.selling_price || 0),
+        cost_price: Math.round(productToEdit.cost_price || 0),
+        initial_stock: Math.round(productToEdit.current_stock || 0),
+        low_stock_threshold: Math.round(productToEdit.low_stock_threshold || 5),
         is_active: productToEdit.is_active,
       });
     } else {
+      setCategoryName(localCategories[0]?.name || '');
       setFormData({
-        category_id: localCategories[0]?.id || 1,
         sku: '',
         name: '',
         description: '',
@@ -81,81 +76,76 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     }
     setImageFile(null);
     setError(null);
-    setIsQuickAddOpen(false);
-    setQuickCategoryName('');
   }, [productToEdit, isOpen, localCategories]);
-
-  // Quick add a category directly inside the modal
-  const handleQuickAddCategory = async (nameToAdd?: string) => {
-    const targetName = (nameToAdd || quickCategoryName).trim();
-    if (!targetName) return;
-
-    try {
-      setIsCreatingCategory(true);
-      setCategoryError(null);
-      const res = await adminApi.createCategory({
-        name: targetName,
-        description: 'Wholesale product classification',
-        is_active: true,
-      });
-
-      if (res.success && res.data) {
-        const createdCat = res.data;
-        const updatedList = [...localCategories, createdCat];
-        setLocalCategories(updatedList);
-        setFormData((prev) => ({ ...prev, category_id: createdCat.id }));
-        setQuickCategoryName('');
-        setIsQuickAddOpen(false);
-        setError(null);
-        if (onCategoriesChange) {
-          onCategoriesChange();
-        }
-      }
-    } catch (err: any) {
-      setCategoryError(err.response?.data?.error?.message || 'Failed to create category');
-    } finally {
-      setIsCreatingCategory(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    try {
-      let productId = productToEdit?.id;
+    const trimmedCat = categoryName.trim();
+    if (!trimmedCat) {
+      setError('Please type or select a category name.');
+      setIsLoading(false);
+      return;
+    }
 
-      if (!productToEdit && localCategories.length === 0) {
-        setError('Please create at least one category above before saving this product.');
-        setIsLoading(false);
-        return;
+    try {
+      // 1. Resolve Category ID (either match existing or auto-create seamlessly)
+      let resolvedCategoryId: number;
+      const matchedCat = localCategories.find(
+        (c) => c.name.toLowerCase() === trimmedCat.toLowerCase()
+      );
+
+      if (matchedCat) {
+        resolvedCategoryId = matchedCat.id;
+      } else {
+        // Auto-create category in the database on the fly!
+        const catRes = await adminApi.createCategory({
+          name: trimmedCat,
+          description: 'Wholesale product classification',
+          is_active: true,
+        });
+
+        if (catRes.success && catRes.data) {
+          resolvedCategoryId = catRes.data.id;
+          const updated = [...localCategories, catRes.data];
+          setLocalCategories(updated);
+          if (onCategoriesChange) {
+            onCategoriesChange();
+          }
+        } else {
+          throw new Error('Failed to create category');
+        }
       }
+
+      // 2. Create or Update Product with integer prices & stock
+      let productId = productToEdit?.id;
 
       if (productToEdit) {
         await adminApi.updateProduct(productToEdit.id, {
-          category_id: Number(formData.category_id),
+          category_id: resolvedCategoryId,
           name: formData.name,
           description: formData.description,
           unit_of_measure: formData.unit_of_measure,
-          selling_price: Number(formData.selling_price),
-          cost_price: Number(formData.cost_price),
-          low_stock_threshold: Number(formData.low_stock_threshold),
+          selling_price: Math.round(Number(formData.selling_price) || 0),
+          cost_price: Math.round(Number(formData.cost_price) || 0),
+          low_stock_threshold: Math.round(Number(formData.low_stock_threshold) || 5),
           is_active: formData.is_active,
         });
       } else {
         const res = await adminApi.createProduct({
           ...formData,
-          category_id: Number(formData.category_id),
-          selling_price: Number(formData.selling_price),
-          cost_price: Number(formData.cost_price),
-          initial_stock: Number(formData.initial_stock),
-          low_stock_threshold: Number(formData.low_stock_threshold),
+          category_id: resolvedCategoryId,
+          selling_price: Math.round(Number(formData.selling_price) || 0),
+          cost_price: Math.round(Number(formData.cost_price) || 0),
+          initial_stock: Math.round(Number(formData.initial_stock) || 0),
+          low_stock_threshold: Math.round(Number(formData.low_stock_threshold) || 5),
         });
         productId = res.data.id;
       }
 
-      // If an image was selected, upload it
+      // 3. Upload Image if provided
       if (imageFile && productId) {
         await adminApi.uploadProductImage(productId, imageFile, true);
       }
@@ -163,7 +153,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to save product');
+      setError(err.response?.data?.error?.message || err.message || 'Failed to save product');
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +165,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     'Cosmetics & Beauty',
     'Bags & Pouches',
     'Novelty & Gifts',
+    'Stationery',
   ];
 
   return (
@@ -193,130 +184,46 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Category Section with Inline Quick Creation */}
+          {/* Direct Category Typing with Autocomplete & Suggestions */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-700">
-                Category *
-              </label>
-              {localCategories.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                >
-                  <Plus className="h-3 w-3" />
-                  <span>{isQuickAddOpen ? 'Cancel' : '+ Quick Add Category'}</span>
-                </button>
-              )}
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1">
+              Category *
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                required
+                list="category-suggestions"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                placeholder="Type category (e.g. Hair Clips, Rings...)"
+                className="w-full rounded-xl border border-gray-300 p-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white placeholder-gray-400"
+              />
+              <datalist id="category-suggestions">
+                {localCategories.map((c) => (
+                  <option key={c.id} value={c.name} />
+                ))}
+              </datalist>
             </div>
 
-            {/* If zero categories, show inline creation box directly */}
-            {localCategories.length === 0 ? (
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-900">
-                    No categories created yet
-                  </span>
-                  <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.5 rounded">
-                    Required
-                  </span>
-                </div>
-                <p className="text-[11px] text-amber-700 leading-tight">
-                  Type a category name to create it instantly in your database:
-                </p>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={quickCategoryName}
-                    onChange={(e) => setQuickCategoryName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleQuickAddCategory();
-                      }
-                    }}
-                    placeholder="e.g. Hair Accessories"
-                    className="flex-1 px-3 py-1.5 text-xs bg-white rounded-lg border border-amber-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={isCreatingCategory || !quickCategoryName.trim()}
-                    onClick={() => handleQuickAddCategory()}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg whitespace-nowrap shadow-xs transition-colors"
-                  >
-                    {isCreatingCategory ? 'Adding...' : '+ Add'}
-                  </button>
-                </div>
-
-                {categoryError && (
-                  <p className="text-[10px] text-rose-600 font-bold">{categoryError}</p>
-                )}
-
-                {/* 1-Click Common Suggestions */}
-                <div className="pt-1">
-                  <span className="text-[10px] text-gray-500 block mb-1">
-                    Or click one to add instantly:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestions.map((sug) => (
-                      <button
-                        key={sug}
-                        type="button"
-                        onClick={() => handleQuickAddCategory(sug)}
-                        disabled={isCreatingCategory}
-                        className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white text-gray-700 border border-gray-200 hover:border-blue-400 hover:text-blue-700 shadow-2xs transition-colors"
-                      >
-                        + {sug}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <select
-                  value={formData.category_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category_id: Number(e.target.value) })
-                  }
-                  className="w-full rounded-xl border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            {/* Quick Suggestion Pills */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-gray-400 font-medium">Suggestions:</span>
+              {suggestions.map((sug) => (
+                <button
+                  key={sug}
+                  type="button"
+                  onClick={() => setCategoryName(sug)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all ${
+                    categoryName.trim().toLowerCase() === sug.toLowerCase()
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                  }`}
                 >
-                  {localCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Quick Add Popdown if toggled */}
-                {isQuickAddOpen && (
-                  <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
-                    <span className="text-[11px] font-bold text-gray-700 block">
-                      Create New Category:
-                    </span>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={quickCategoryName}
-                        onChange={(e) => setQuickCategoryName(e.target.value)}
-                        placeholder="e.g. Fashion Jewelry"
-                        className="flex-1 px-2.5 py-1 text-xs bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        disabled={isCreatingCategory || !quickCategoryName.trim()}
-                        onClick={() => handleQuickAddCategory()}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg whitespace-nowrap"
-                      >
-                        {isCreatingCategory ? 'Saving...' : 'Add'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  {sug}
+                </button>
+              ))}
+            </div>
           </div>
 
           <Input
@@ -349,22 +256,32 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <Input
             label="Selling Price (Rs.) *"
             type="number"
-            step="0.01"
+            step="1"
+            min="0"
             required
-            value={formData.selling_price}
+            value={formData.selling_price || ''}
             onChange={(e) =>
-              setFormData({ ...formData, selling_price: parseFloat(e.target.value) || 0 })
+              setFormData({
+                ...formData,
+                selling_price: Math.max(0, Math.round(Number(e.target.value) || 0)),
+              })
             }
+            placeholder="e.g. 450"
           />
 
           <Input
             label="Cost Price (Rs.) [Admin]"
             type="number"
-            step="0.01"
-            value={formData.cost_price}
+            step="1"
+            min="0"
+            value={formData.cost_price || ''}
             onChange={(e) =>
-              setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })
+              setFormData({
+                ...formData,
+                cost_price: Math.max(0, Math.round(Number(e.target.value) || 0)),
+              })
             }
+            placeholder="e.g. 280"
           />
         </div>
 
@@ -373,20 +290,32 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             <Input
               label="Initial Stock Quantity"
               type="number"
-              value={formData.initial_stock}
+              step="1"
+              min="0"
+              value={formData.initial_stock || ''}
               onChange={(e) =>
-                setFormData({ ...formData, initial_stock: parseInt(e.target.value) || 0 })
+                setFormData({
+                  ...formData,
+                  initial_stock: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                })
               }
+              placeholder="e.g. 100"
             />
           )}
 
           <Input
             label="Low-Stock Alert Threshold"
             type="number"
-            value={formData.low_stock_threshold}
+            step="1"
+            min="0"
+            value={formData.low_stock_threshold || ''}
             onChange={(e) =>
-              setFormData({ ...formData, low_stock_threshold: parseInt(e.target.value) || 5 })
+              setFormData({
+                ...formData,
+                low_stock_threshold: Math.max(0, Math.round(Number(e.target.value) || 0)),
+              })
             }
+            placeholder="e.g. 5"
           />
         </div>
 

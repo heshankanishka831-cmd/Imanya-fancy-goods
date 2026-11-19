@@ -24,8 +24,6 @@ export const Sidebar: React.FC = () => {
     { to: '/admin/products', label: 'Products', icon: Package, roles: ['Super Administrator', 'Inventory Manager'] },
     { to: '/admin/categories', label: 'Categories', icon: Layers, roles: ['Super Administrator', 'Inventory Manager'] },
     { to: '/admin/inventory', label: 'Inventory & Stock', icon: Boxes, roles: ['Super Administrator', 'Inventory Manager'] },
-    { to: '/admin/suppliers', label: 'Suppliers', icon: Truck, roles: ['Super Administrator', 'Inventory Manager'] },
-    { to: '/admin/procurement', label: 'Procurement (POs)', icon: FileSpreadsheet, roles: ['Super Administrator', 'Inventory Manager'] },
     { to: '/admin/orders', label: 'Customer Orders', icon: ShoppingCart, roles: ['Super Administrator', 'Order Manager'] },
     { to: '/admin/reports', label: 'Reports & PDF', icon: FileText, roles: ['Super Administrator', 'Inventory Manager', 'Order Manager'] },
     { to: '/admin/customers', label: 'Customers', icon: Users, roles: ['Super Administrator', 'Order Manager'] },
