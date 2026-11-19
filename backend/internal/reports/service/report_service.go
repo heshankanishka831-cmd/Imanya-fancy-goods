@@ -30,14 +30,28 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		Where("(current_stock - allocated_stock) <= low_stock_threshold").
 		Count(&lowStockCount).Error
 
+	var outOfStockCount int64
+	_ = s.db.WithContext(ctx).Table("product_stock").
+		Where("current_stock = 0").
+		Count(&outOfStockCount).Error
+
 	var totalOrders int64
 	_ = s.db.WithContext(ctx).Table("orders").Count(&totalOrders).Error
 
 	var totalVolume float64
 	_ = s.db.WithContext(ctx).Table("orders").
-		Where("status IN ('CONFIRMED', 'PROCESSING', 'COMPLETED')").
+		Where("status IN ('CONFIRMED', 'PROCESSING', 'COMPLETED', 'DELIVERED')").
 		Select("COALESCE(SUM(total_amount), 0)").
 		Row().Scan(&totalVolume)
+
+	var totalCustomers int64
+	_ = s.db.WithContext(ctx).Table("customers").Where("is_active = true").Count(&totalCustomers).Error
+
+	var inventoryValuation float64
+	_ = s.db.WithContext(ctx).Table("product_stock").
+		Joins("JOIN products ON products.id = product_stock.product_id").
+		Select("COALESCE(SUM(product_stock.current_stock * products.cost_price), 0)").
+		Row().Scan(&inventoryValuation)
 
 	var activeSuppliers int64
 	_ = s.db.WithContext(ctx).Table("suppliers").Where("is_active = true").Count(&activeSuppliers).Error
@@ -117,17 +131,21 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 	}
 
 	return &dto.DashboardMetricsResponse{
-		TotalProducts:    totalProducts,
-		LowStockCount:    lowStockCount,
-		TotalOrders:      totalOrders,
-		PendingOrders:    statusCounts["PENDING"],
-		CompletedOrders:  statusCounts["COMPLETED"],
-		TotalOrderVolume: totalVolume,
-		ActiveSuppliers:  activeSuppliers,
-		PendingPOs:       pendingPOs,
-		OrdersByStatus:   statusCounts,
-		RecentOrders:     recentOrders,
-		LowStockAlerts:   lowStockAlerts,
+		TotalProducts:      totalProducts,
+		LowStockCount:      lowStockCount,
+		OutOfStockCount:    outOfStockCount,
+		TotalOrders:        totalOrders,
+		PendingOrders:      statusCounts["PENDING"],
+		ProcessingOrders:   statusCounts["PROCESSING"],
+		CompletedOrders:    statusCounts["DELIVERED"] + statusCounts["COMPLETED"],
+		TotalOrderVolume:   totalVolume,
+		InventoryValuation: inventoryValuation,
+		TotalCustomers:     totalCustomers,
+		ActiveSuppliers:    activeSuppliers,
+		PendingPOs:         pendingPOs,
+		OrdersByStatus:     statusCounts,
+		RecentOrders:       recentOrders,
+		LowStockAlerts:     lowStockAlerts,
 	}, nil
 }
 

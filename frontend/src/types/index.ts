@@ -192,10 +192,14 @@ export interface Customer {
 export interface DashboardMetrics {
   total_products: number;
   low_stock_count: number;
+  out_of_stock_count?: number;
   total_orders: number;
   pending_orders: number;
+  processing_orders?: number;
   completed_orders: number;
   total_order_volume: number;
+  inventory_valuation?: number;
+  total_customers?: number;
   active_suppliers: number;
   pending_pos: number;
   orders_by_status: Record<string, number>;
