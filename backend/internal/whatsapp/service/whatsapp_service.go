@@ -41,11 +41,11 @@ func (s *whatsAppService) GenerateOrderLink(order *model.Order) string {
 	sb.WriteString("\n*Order Items:*\n")
 
 	for _, item := range order.Items {
-		sb.WriteString(fmt.Sprintf("- %dx %s ($%.2f) = $%.2f\n",
+		sb.WriteString(fmt.Sprintf("- %dx %s (Rs. %.2f) = Rs. %.2f\n",
 			item.Quantity, item.ProductName, item.UnitPrice, item.Subtotal))
 	}
 
-	sb.WriteString(fmt.Sprintf("\n*Total Order Amount:* $%.2f\n", order.TotalAmount))
+	sb.WriteString(fmt.Sprintf("\n*Total Order Amount:* Rs. %.2f\n", order.TotalAmount))
 
 	if order.CustomerNotes != "" {
 		sb.WriteString(fmt.Sprintf("\n*Notes:* %s\n", order.CustomerNotes))

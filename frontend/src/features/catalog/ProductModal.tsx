@@ -77,6 +77,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     try {
       let productId = productToEdit?.id;
 
+      if (!productToEdit && categories.length === 0) {
+        setError('Please create at least one category in the Categories section before adding products.');
+        setIsLoading(false);
+        return;
+      }
       if (productToEdit) {
         await adminApi.updateProduct(productToEdit.id, {
           category_id: Number(formData.category_id),
@@ -133,17 +138,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1">
               Category *
             </label>
-            <select
-              value={formData.category_id}
-              onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
-              className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            {categories.length === 0 ? (
+              <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                No categories yet. Please add a category first.
+              </div>
+            ) : (
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
+                className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <Input
@@ -152,7 +163,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             disabled={!!productToEdit}
             value={formData.sku}
             onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-            placeholder="e.g. BEV-SPK-500"
+            placeholder="e.g. FNC-001"
           />
         </div>
 
@@ -161,7 +172,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           required
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="e.g. Sparkling Orange Juice 500ml"
+          placeholder="e.g. Korean Crystal Hair Clip Set"
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -170,7 +181,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             required
             value={formData.unit_of_measure}
             onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
-            placeholder="UNIT, CARTON, BOX..."
+            placeholder="PIECE, DOZEN, PACK, BOX..."
           />
 
           <Input
