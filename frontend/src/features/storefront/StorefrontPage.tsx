@@ -185,8 +185,20 @@ export const StorefrontPage: React.FC = () => {
       ) : products.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-xs">
           <Package className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-          <h3 className="text-base font-bold text-gray-800">No products found</h3>
-          <p className="text-xs text-gray-500 mt-1">Try selecting another category or adjusting your search term.</p>
+          <h3 className="text-base font-bold text-gray-800">No products in catalogue yet</h3>
+          <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+            All demo data has been cleared. The Super Administrator can now add fresh wholesale products and categories from the Management Dashboard.
+          </p>
+          {user?.role_name !== 'Customer' && isAuthenticated && (
+            <div className="mt-4">
+              <Link
+                to="/admin/products"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition-colors"
+              >
+                Go to Products &rarr;
+              </Link>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
