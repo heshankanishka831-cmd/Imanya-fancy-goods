@@ -117,23 +117,33 @@ export const DashboardPage: React.FC = () => {
       label: 'Total Wholesale Income',
       val: formatCurrency(metrics.total_order_volume || 0),
       icon: TrendingUp,
-      trend: '+15% from verified sales',
-      trendColor: 'text-emerald-600 font-bold',
+      trend: `${metrics.total_orders || 0} order(s) recorded`,
+      trendColor: 'text-emerald-600 font-semibold',
       color: 'text-emerald-600 bg-emerald-50',
     },
   ];
 
   const recentOrders = metrics.recent_orders || [];
   const lowStockAlerts = metrics.low_stock_alerts || [];
-  const weeklySales = metrics.weekly_sales && metrics.weekly_sales.length === 7 ? metrics.weekly_sales : [
-    { date: '2026-11-13', orders: 1, revenue: 4500 },
-    { date: '2026-11-14', orders: 3, revenue: 12000 },
-    { date: '2026-11-15', orders: 2, revenue: 8500 },
-    { date: '2026-11-16', orders: 4, revenue: 19000 },
-    { date: '2026-11-17', orders: 2, revenue: 9500 },
-    { date: '2026-11-18', orders: 5, revenue: 24500 },
-    { date: '2026-11-19', orders: metrics.total_orders || 3, revenue: metrics.total_order_volume || 16000 },
-  ];
+
+  // Generate 7-day calendar baseline from real database records (0 if no orders yet)
+  const weeklySales = (() => {
+    if (metrics.weekly_sales && metrics.weekly_sales.length === 7) {
+      return metrics.weekly_sales;
+    }
+    const days = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const iso = d.toISOString().split('T')[0];
+      days.push({ date: iso, orders: 0, revenue: 0 });
+    }
+    return days;
+  })();
+
+  const totalWeeklyOrders = weeklySales.reduce((acc, curr) => acc + curr.orders, 0);
+  const totalWeeklyRevenue = weeklySales.reduce((acc, curr) => acc + curr.revenue, 0);
 
   // Helper date labels for 7-day charts
   const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -312,6 +322,11 @@ export const DashboardPage: React.FC = () => {
                   );
                 })}
               </svg>
+              {totalWeeklyOrders === 0 && (
+                <p className="text-[10px] text-gray-400 text-center mt-1">
+                  0 orders in the last 7 days. Incoming orders will chart here automatically.
+                </p>
+              )}
             </div>
           </div>
 
@@ -321,7 +336,7 @@ export const DashboardPage: React.FC = () => {
               <span>Live distribution order flow</span>
             </span>
             <span className="font-semibold text-emerald-600">
-              {weeklySales.reduce((acc, curr) => acc + curr.orders, 0)} total orders
+              {totalWeeklyOrders} total orders
             </span>
           </div>
         </div>
@@ -408,6 +423,11 @@ export const DashboardPage: React.FC = () => {
                   );
                 })}
               </svg>
+              {(metrics.total_order_volume || 0) === 0 && (
+                <p className="text-[10px] text-gray-400 text-center mt-1">
+                  Rs. 0 revenue recorded yet. Verified sales income will chart here as orders are placed.
+                </p>
+              )}
             </div>
           </div>
 
@@ -484,6 +504,12 @@ export const DashboardPage: React.FC = () => {
                   <span className="text-base font-extrabold text-rose-900">{outCount}</span>
                 </div>
               </div>
+
+              {totalProds === 0 && (
+                <p className="text-[10px] text-gray-400 text-center mt-2">
+                  0 wholesale products listed. Once you add items, warehouse stock health will monitor here.
+                </p>
+              )}
             </div>
           </div>
 
