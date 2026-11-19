@@ -44,12 +44,6 @@ export const LoginPage: React.FC = () => {
     setError(null);
   };
 
-  const fillCustomer = () => {
-    setIdentifier('sunilfancy');
-    setPassword('Customer@123');
-    setError(null);
-  };
-
   return (
     <div>
       <div className="mb-6 text-center">
@@ -108,29 +102,16 @@ export const LoginPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Quick Testing Shortcuts */}
-      <div className="mt-5 pt-4 border-t border-gray-100">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block text-center mb-2">
-          Quick 1-Click Test Logins
-        </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={fillAdmin}
-            className="flex items-center justify-center gap-1.5 p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 transition-colors"
-          >
-            <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-            <span>Super Admin</span>
-          </button>
-          <button
-            type="button"
-            onClick={fillCustomer}
-            className="flex items-center justify-center gap-1.5 p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 transition-colors"
-          >
-            <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Sample Customer</span>
-          </button>
-        </div>
+      {/* Super Admin Quick Fill */}
+      <div className="mt-5 pt-4 border-t border-gray-100 text-center">
+        <button
+          type="button"
+          onClick={fillAdmin}
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 transition-colors mx-auto"
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+          <span>Auto-Fill Super Admin (admin@wholesale.local)</span>
+        </button>
       </div>
     </div>
   );
