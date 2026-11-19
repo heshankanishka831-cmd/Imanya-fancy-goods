@@ -81,7 +81,8 @@ type ProductPublicResponse struct {
 	Slug          string                 `json:"slug"`
 	Description   string                 `json:"description"`
 	UnitOfMeasure string                 `json:"unit_of_measure"`
-	SellingPrice  float64                `json:"selling_price"`
-	InStock       bool                   `json:"in_stock"`
-	Images        []ProductImageResponse `json:"images"`
+	SellingPrice   float64                `json:"selling_price"`
+	InStock        bool                   `json:"in_stock"`
+	AvailableStock int                    `json:"available_stock"`
+	Images         []ProductImageResponse `json:"images"`
 }

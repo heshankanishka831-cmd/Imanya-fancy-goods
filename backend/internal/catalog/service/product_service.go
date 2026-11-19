@@ -366,21 +366,26 @@ func toProductPublicResponse(p *model.Product) *dto.ProductPublicResponse {
 	}
 
 	inStock := false
-	if p.Stock != nil && p.Stock.AvailableStock() > 0 {
-		inStock = true
+	availStock := 0
+	if p.Stock != nil {
+		availStock = p.Stock.AvailableStock()
+		if availStock > 0 {
+			inStock = true
+		}
 	}
 
 	return &dto.ProductPublicResponse{
-		ID:            p.ID,
-		CategoryID:    p.CategoryID,
-		CategoryName:  p.Category.Name,
-		SKU:           p.SKU,
-		Name:          p.Name,
-		Slug:          p.Slug,
-		Description:   p.Description,
-		UnitOfMeasure: p.UnitOfMeasure,
-		SellingPrice:  p.SellingPrice,
-		InStock:       inStock,
-		Images:        images,
+		ID:             p.ID,
+		CategoryID:     p.CategoryID,
+		CategoryName:   p.Category.Name,
+		SKU:            p.SKU,
+		Name:           p.Name,
+		Slug:           p.Slug,
+		Description:    p.Description,
+		UnitOfMeasure:  p.UnitOfMeasure,
+		SellingPrice:   p.SellingPrice,
+		InStock:        inStock,
+		AvailableStock: availStock,
+		Images:         images,
 	}
 }

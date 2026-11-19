@@ -43,6 +43,7 @@ export interface Product {
   unit_of_measure: string;
   selling_price: number;
   in_stock: boolean;
+  available_stock?: number;
   images: ProductImage[];
 }
 
