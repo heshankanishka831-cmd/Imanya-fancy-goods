@@ -198,6 +198,7 @@ export interface DashboardMetrics {
   processing_orders?: number;
   completed_orders: number;
   total_order_volume: number;
+  pending_order_volume?: number;
   inventory_valuation?: number;
   total_customers?: number;
   active_suppliers: number;
@@ -222,6 +223,7 @@ export interface DashboardMetrics {
     date: string;
     orders: number;
     revenue: number;
+    gross_demand?: number;
   }[];
 }
 

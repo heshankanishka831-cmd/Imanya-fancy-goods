@@ -9,6 +9,7 @@ type DashboardMetricsResponse struct {
 	ProcessingOrders   int64            `json:"processing_orders"`
 	CompletedOrders    int64            `json:"completed_orders"`
 	TotalOrderVolume   float64          `json:"total_order_volume"`
+	PendingOrderVolume float64          `json:"pending_order_volume"`
 	InventoryValuation float64          `json:"inventory_valuation"`
 	TotalCustomers     int64            `json:"total_customers"`
 	ActiveSuppliers    int64            `json:"active_suppliers"`
@@ -58,7 +59,8 @@ type TopProductReportDTO struct {
 }
 
 type DailySalesDTO struct {
-	Date    string  `json:"date"`
-	Orders  int64   `json:"orders"`
-	Revenue float64 `json:"revenue"`
+	Date        string  `json:"date"`
+	Orders      int64   `json:"orders"`
+	Revenue     float64 `json:"revenue"`
+	GrossDemand float64 `json:"gross_demand"`
 }

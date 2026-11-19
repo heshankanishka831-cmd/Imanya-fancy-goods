@@ -21,8 +21,8 @@ import {
   Clock,
   ShieldCheck,
   CheckCircle2,
-  BarChart3,
-  Calendar,
+  MessageSquare,
+  CheckSquare,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -87,12 +87,15 @@ export const DashboardPage: React.FC = () => {
   }
 
   // 1. KPI Cards Setup
+  const pendingOrdersCount = metrics.pending_orders || 0;
+  const pendingRevenueAmount = metrics.pending_order_volume || 0;
+
   const kpis = [
     {
       label: 'Wholesale Products',
       val: metrics.total_products || 0,
       icon: Package,
-      trend: `${metrics.total_products || 0} Active SKUs`,
+      trend: `${metrics.total_products || 0} Active SKUs Listed`,
       trendColor: 'text-blue-600',
       color: 'text-blue-600 bg-blue-50',
     },
@@ -100,25 +103,31 @@ export const DashboardPage: React.FC = () => {
       label: 'Low Stock Alerts',
       val: metrics.low_stock_count || 0,
       icon: AlertTriangle,
-      trend: (metrics.low_stock_count || 0) > 0 ? 'Requires restock' : 'Stock optimal',
+      trend: (metrics.low_stock_count || 0) > 0 ? 'Requires stock replenishing' : 'All stock levels optimal',
       trendColor: (metrics.low_stock_count || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600',
       color: 'text-amber-600 bg-amber-50',
       alert: (metrics.low_stock_count || 0) > 0,
     },
     {
-      label: 'Total Orders',
+      label: 'Wholesale Orders Placed',
       val: metrics.total_orders || 0,
       icon: ShoppingCart,
-      trend: `${metrics.completed_orders || 0} completed orders`,
-      trendColor: 'text-indigo-600',
+      trend:
+        pendingOrdersCount > 0
+          ? `${pendingOrdersCount} awaiting WhatsApp slip`
+          : `${metrics.completed_orders || 0} completed orders`,
+      trendColor: pendingOrdersCount > 0 ? 'text-amber-600 font-bold' : 'text-indigo-600',
       color: 'text-indigo-600 bg-indigo-50',
     },
     {
-      label: 'Total Wholesale Income',
+      label: 'Verified WhatsApp Income',
       val: formatCurrency(metrics.total_order_volume || 0),
       icon: TrendingUp,
-      trend: `${metrics.total_orders || 0} order(s) recorded`,
-      trendColor: 'text-emerald-600 font-semibold',
+      trend:
+        pendingRevenueAmount > 0
+          ? `${formatCurrency(pendingRevenueAmount)} pending verification`
+          : 'All payment slips verified',
+      trendColor: pendingRevenueAmount > 0 ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold',
       color: 'text-emerald-600 bg-emerald-50',
     },
   ];
@@ -137,7 +146,7 @@ export const DashboardPage: React.FC = () => {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const iso = d.toISOString().split('T')[0];
-      days.push({ date: iso, orders: 0, revenue: 0 });
+      days.push({ date: iso, orders: 0, revenue: 0, gross_demand: 0 });
     }
     return days;
   })();
@@ -167,19 +176,19 @@ export const DashboardPage: React.FC = () => {
   };
 
   // SVG Chart Calculations
-  // Chart 1: Bar Chart (Sales Volume)
+  // Chart 1: Bar Chart (Order Volume)
   const maxOrders = Math.max(...weeklySales.map((d) => d.orders), 5);
   const chartWidth = 280;
   const chartHeight = 110;
   const barWidth = 18;
   const barSpacing = chartWidth / 7;
 
-  // Chart 2: Line Chart (Daily Income)
+  // Chart 2: Line Chart (Verified WhatsApp Income)
   const maxRevenue = Math.max(...weeklySales.map((d) => d.revenue), 1000);
   const linePoints = weeklySales.map((d, i) => {
     const x = 20 + i * ((chartWidth - 40) / 6);
     const y = 95 - (d.revenue / maxRevenue) * 75;
-    return { x, y, revenue: d.revenue, date: d.date };
+    return { x, y, revenue: d.revenue, gross_demand: d.gross_demand || 0, date: d.date };
   });
   const linePathString = linePoints.map((p) => `${p.x},${p.y}`).join(' ');
 
@@ -199,7 +208,7 @@ export const DashboardPage: React.FC = () => {
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-gray-900 tracking-tight">Super Administrator Control Shortcuts</h2>
-          <p className="text-xs text-gray-500">Quickly add items, oversee staff accounts, or export official business reports</p>
+          <p className="text-xs text-gray-500">Quickly add items, verify customer WhatsApp payments, or inspect stock</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -208,6 +217,18 @@ export const DashboardPage: React.FC = () => {
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add New Item</span>
+          </Link>
+
+          <Link
+            to="/admin/orders"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
+              pendingOrdersCount > 0
+                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+            }`}
+          >
+            <CheckSquare className="h-3.5 w-3.5" />
+            <span>Verify Orders {pendingOrdersCount > 0 && `(${pendingOrdersCount} Slips)`}</span>
           </Link>
 
           <Link
@@ -266,16 +287,23 @@ export const DashboardPage: React.FC = () => {
 
       {/* 2. Visual Diagrams & Charts Row (Matching Middle Row in Reference Image) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Diagram 1: Weekly Sales Activity (Bar Chart - Green Rounded Bars) */}
+        {/* Diagram 1: Weekly Wholesale Orders (Bar Chart - Emerald Green) */}
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
           <div>
-            <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Sales Activity</h4>
-            <p className="text-[11px] text-gray-500 mb-3">Daily bulk order volume (Units & orders)</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Wholesale Orders</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Storefront requests & WhatsApp inquiries</p>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Last 7 Days
+              </span>
+            </div>
 
             {/* SVG Bar Chart */}
             <div className="relative pt-2 pb-1">
               {hoveredBarIdx !== null && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
                   {getDayLabel(weeklySales[hoveredBarIdx].date)}: {weeklySales[hoveredBarIdx].orders} Order(s)
                 </div>
               )}
@@ -333,7 +361,7 @@ export const DashboardPage: React.FC = () => {
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-gray-400" />
-              <span>Live distribution order flow</span>
+              <span>Live customer order flow</span>
             </span>
             <span className="font-semibold text-emerald-600">
               {totalWeeklyOrders} total orders
@@ -341,16 +369,16 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Diagram 2: Daily Wholesale Income (Line Chart - Smooth Curves & Points) */}
+        {/* Diagram 2: Verified Wholesale Revenue (Line Chart - Blue Area & Points) */}
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Daily Wholesale Income</h4>
-                <p className="text-[11px] text-gray-500 mb-3">Revenue in Sri Lankan Rupees (Rs.)</p>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Verified Wholesale Revenue</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Confirmed via WhatsApp bank deposit slips</p>
               </div>
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                LKR (Rs.)
+              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                Rs. Verified
               </span>
             </div>
 
@@ -425,16 +453,22 @@ export const DashboardPage: React.FC = () => {
               </svg>
               {(metrics.total_order_volume || 0) === 0 && (
                 <p className="text-[10px] text-gray-400 text-center mt-1">
-                  Rs. 0 revenue recorded yet. Verified sales income will chart here as orders are placed.
+                  Rs. 0 verified income. When customer bank deposit slips are confirmed on WhatsApp, revenue charts here live.
                 </p>
               )}
+            </div>
+
+            {/* Income Recognition Note */}
+            <div className="mt-2 p-2 bg-blue-50/60 rounded-xl border border-blue-100/70 text-[10px] text-blue-900 flex items-center justify-between">
+              <span className="font-medium">Pending Slip Verification:</span>
+              <span className="font-bold text-amber-700">{formatCurrency(pendingRevenueAmount)}</span>
             </div>
           </div>
 
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
-              <span>Verified customer receipts</span>
+              <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
+              <span>Realized bank account receipts</span>
             </span>
             <span className="font-bold text-blue-700">
               {formatCurrency(metrics.total_order_volume || 0)}
@@ -442,33 +476,59 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Diagram 3: Stock & Low Quantity Watchdog (Distribution Gauge & Multi-Bars) */}
+        {/* Diagram 3: WhatsApp Slips & Stock Health Sentinel */}
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Stock & Low-Qty Monitor</h4>
-                <p className="text-[11px] text-gray-500 mb-3">Warehouse quantity health & safety thresholds</p>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">WhatsApp Slips & Stock Monitor</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Verification pipeline & warehouse stock</p>
               </div>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  lowCount > 0
+                  pendingOrdersCount > 0
                     ? 'bg-amber-50 text-amber-800 border-amber-200'
                     : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 }`}
               >
-                {lowCount > 0 ? `${lowCount} Low Items` : 'Optimal Health'}
+                {pendingOrdersCount > 0 ? `${pendingOrdersCount} Slips Pending` : 'All Slips Verified'}
               </span>
             </div>
 
-            {/* Health Meter Progress Bar */}
+            {/* Stage 1: WhatsApp Slip Verification Flow */}
             <div className="space-y-3 pt-1">
               <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  WhatsApp Fulfillment Pipeline
+                </span>
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  <div className="bg-amber-50 border border-amber-200/80 p-2 rounded-xl">
+                    <span className="text-[9px] font-bold text-amber-800 uppercase block">Slip Check</span>
+                    <span className="text-sm font-black text-amber-900">{pendingOrdersCount}</span>
+                    <span className="text-[9px] text-amber-600 block mt-0.5">Pending</span>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200/80 p-2 rounded-xl">
+                    <span className="text-[9px] font-bold text-blue-800 uppercase block">Packaging</span>
+                    <span className="text-sm font-black text-blue-900">{metrics.processing_orders || 0}</span>
+                    <span className="text-[9px] text-blue-600 block mt-0.5">Confirmed</span>
+                  </div>
+
+                  <div className="bg-emerald-50 border border-emerald-200/80 p-2 rounded-xl">
+                    <span className="text-[9px] font-bold text-emerald-800 uppercase block">Dispatched</span>
+                    <span className="text-sm font-black text-emerald-900">{metrics.completed_orders || 0}</span>
+                    <span className="text-[9px] text-emerald-600 block mt-0.5">Completed</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stage 2: Warehouse Stock Health Ratio */}
+              <div className="pt-1">
                 <div className="flex justify-between text-xs font-semibold text-gray-700 mb-1">
-                  <span>Catalogue Stock Health Ratio</span>
+                  <span>Warehouse Stock Ratio</span>
                   <span className="text-emerald-600 font-bold">{healthyPct}% Optimal</span>
                 </div>
-                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
+                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
                   <div
                     style={{ width: `${healthyPct}%` }}
                     className="bg-emerald-500 transition-all duration-500"
@@ -488,35 +548,27 @@ export const DashboardPage: React.FC = () => {
               </div>
 
               {/* Status Breakdown Pills */}
-              <div className="grid grid-cols-3 gap-2 pt-2">
-                <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl text-center">
-                  <span className="text-[10px] font-semibold text-emerald-700 uppercase block">Optimal</span>
-                  <span className="text-base font-extrabold text-emerald-900">{healthyCount}</span>
+              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                <div className="bg-gray-50 border border-gray-100 py-1 px-2 rounded-lg">
+                  <span className="text-[9px] text-gray-500 block">Optimal</span>
+                  <span className="text-xs font-bold text-emerald-700">{healthyCount}</span>
                 </div>
-
-                <div className="bg-amber-50/70 border border-amber-100 p-2 rounded-xl text-center">
-                  <span className="text-[10px] font-semibold text-amber-700 uppercase block">Low Qty</span>
-                  <span className="text-base font-extrabold text-amber-900">{lowCount}</span>
+                <div className="bg-gray-50 border border-gray-100 py-1 px-2 rounded-lg">
+                  <span className="text-[9px] text-gray-500 block">Low Stock</span>
+                  <span className="text-xs font-bold text-amber-700">{lowCount}</span>
                 </div>
-
-                <div className="bg-rose-50/70 border border-rose-100 p-2 rounded-xl text-center">
-                  <span className="text-[10px] font-semibold text-rose-700 uppercase block">Depleted</span>
-                  <span className="text-base font-extrabold text-rose-900">{outCount}</span>
+                <div className="bg-gray-50 border border-gray-100 py-1 px-2 rounded-lg">
+                  <span className="text-[9px] text-gray-500 block">Depleted</span>
+                  <span className="text-xs font-bold text-rose-700">{outCount}</span>
                 </div>
               </div>
-
-              {totalProds === 0 && (
-                <p className="text-[10px] text-gray-400 text-center mt-2">
-                  0 wholesale products listed. Once you add items, warehouse stock health will monitor here.
-                </p>
-              )}
             </div>
           </div>
 
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Automated stock sentinel active</span>
+              <span>Real-time WhatsApp & stock monitor</span>
             </span>
             <span className="font-semibold text-gray-600">{totalProds} total items</span>
           </div>
@@ -529,19 +581,19 @@ export const DashboardPage: React.FC = () => {
         <div className="lg:col-span-2">
           <Card
             title="Recent Wholesale Orders"
-            subtitle="Incoming customer order requests and status"
+            subtitle="Incoming customer order requests and WhatsApp verification"
             action={
               <Link
                 to="/admin/orders"
                 className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
               >
-                <span>View All Orders</span>
+                <span>Manage & Verify Orders</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             }
           >
             {recentOrders.length === 0 ? (
-              <p className="text-xs text-gray-400 py-6 text-center">No orders placed yet.</p>
+              <p className="text-xs text-gray-400 py-6 text-center">No wholesale orders placed yet.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
@@ -552,18 +604,28 @@ export const DashboardPage: React.FC = () => {
                       <th className="pb-3">Amount</th>
                       <th className="pb-3">Status</th>
                       <th className="pb-3">Date</th>
+                      <th className="pb-3 text-right">Verification</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-medium text-gray-700">
                     {recentOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 font-bold text-gray-900">{o.order_number}</td>
-                        <td className="py-3">{o.customer || 'Wholesale Buyer'}</td>
-                        <td className="py-3 font-semibold text-gray-900">{formatCurrency(o.total_amount)}</td>
+                        <td className="py-3 font-bold text-gray-900 font-mono">{o.order_number}</td>
+                        <td className="py-3 font-semibold text-gray-800">{o.customer || 'Wholesale Buyer'}</td>
+                        <td className="py-3 font-extrabold text-gray-900">{formatCurrency(o.total_amount)}</td>
                         <td className="py-3">
                           <Badge status={o.status} />
                         </td>
                         <td className="py-3 text-gray-400">{o.created_at}</td>
+                        <td className="py-3 text-right">
+                          <Link
+                            to="/admin/orders"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            <span>Inspect & Verify</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

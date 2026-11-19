@@ -44,6 +44,12 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		Select("COALESCE(SUM(total_amount), 0)").
 		Row().Scan(&totalVolume)
 
+	var pendingVolume float64
+	_ = s.db.WithContext(ctx).Table("orders").
+		Where("status = 'PENDING'").
+		Select("COALESCE(SUM(total_amount), 0)").
+		Row().Scan(&pendingVolume)
+
 	var totalCustomers int64
 	_ = s.db.WithContext(ctx).Table("customers").Where("is_active = true").Count(&totalCustomers).Error
 
@@ -132,13 +138,14 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 
 	// 7-Day sales and revenue breakdown for live dashboard diagrams
 	type dailyRaw struct {
-		Date    string
-		Orders  int64
-		Revenue float64
+		Date        string
+		Orders      int64
+		Revenue     float64
+		GrossDemand float64
 	}
 	var rawDailies []dailyRaw
 	_ = s.db.WithContext(ctx).Table("orders").
-		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue").
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as orders, COALESCE(SUM(CASE WHEN status IN ('CONFIRMED', 'PROCESSING', 'COMPLETED', 'DELIVERED') THEN total_amount ELSE 0 END), 0) as revenue, COALESCE(SUM(total_amount), 0) as gross_demand").
 		Where("created_at >= NOW() - INTERVAL '7 days'").
 		Where("status != 'CANCELLED'").
 		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
@@ -156,15 +163,17 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		dayStr := nowTime.AddDate(0, 0, -i).Format("2006-01-02")
 		if d, exists := dailyMap[dayStr]; exists {
 			weeklySales = append(weeklySales, dto.DailySalesDTO{
-				Date:    dayStr,
-				Orders:  d.Orders,
-				Revenue: d.Revenue,
+				Date:        dayStr,
+				Orders:      d.Orders,
+				Revenue:     d.Revenue,
+				GrossDemand: d.GrossDemand,
 			})
 		} else {
 			weeklySales = append(weeklySales, dto.DailySalesDTO{
-				Date:    dayStr,
-				Orders:  0,
-				Revenue: 0,
+				Date:        dayStr,
+				Orders:      0,
+				Revenue:     0,
+				GrossDemand: 0,
 			})
 		}
 	}
@@ -178,6 +187,7 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		ProcessingOrders:   statusCounts["PROCESSING"],
 		CompletedOrders:    statusCounts["DELIVERED"] + statusCounts["COMPLETED"],
 		TotalOrderVolume:   totalVolume,
+		PendingOrderVolume: pendingVolume,
 		InventoryValuation: inventoryValuation,
 		TotalCustomers:     totalCustomers,
 		ActiveSuppliers:    activeSuppliers,
