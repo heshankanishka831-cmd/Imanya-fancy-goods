@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { adminApi } from '../../services/endpoints';
-import { DashboardMetrics } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
-import { Card } from '../../components/ui/Card';
+import { DashboardMetrics, ProductAdmin, Order } from '../../types';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
+import { OrderDetailModal } from '../orders/OrderDetailModal';
 import {
   Package,
   AlertTriangle,
@@ -23,32 +23,74 @@ import {
   CheckCircle2,
   MessageSquare,
   CheckSquare,
+  Bell,
+  ArrowUpRight,
+  Database,
+  Calendar,
+  Layers,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+// Helper function to generate ultra-smooth cubic bezier spline curves for SVG charts
+function getSmoothCurvePath(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? 0 : i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return path;
+}
+
 export const DashboardPage: React.FC = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [topProducts, setTopProducts] = useState<ProductAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // SVG Chart hover states
   const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null);
   const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null);
 
+  // Modal inspection directly from dashboard
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [inspectingOrderId, setInspectingOrderId] = useState<string | null>(null);
+
   useEffect(() => {
-    loadMetrics();
+    loadDashboardData();
   }, []);
 
-  const loadMetrics = async () => {
+  const loadDashboardData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await adminApi.getDashboardMetrics();
-      if (res.success && res.data) {
-        setMetrics(res.data);
+      const [metricsRes, productsRes] = await Promise.all([
+        adminApi.getDashboardMetrics(),
+        adminApi.getProducts({ limit: 6 }),
+      ]);
+
+      if (metricsRes.success && metricsRes.data) {
+        setMetrics(metricsRes.data);
       } else {
-        setError('Failed to fetch dashboard statistics from server.');
+        setError('Failed to fetch real-time dashboard telemetry from the database.');
+      }
+
+      if (productsRes.success && productsRes.data) {
+        setTopProducts(productsRes.data);
       }
     } catch (err: any) {
-      console.error('Failed to load dashboard metrics', err);
+      console.error('Failed to load dashboard data', err);
       const message =
         err.response?.data?.error?.message ||
         err.message ||
@@ -59,83 +101,103 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const handleInspectOrder = async (orderId: string) => {
+    try {
+      setInspectingOrderId(orderId);
+      const res = await adminApi.getOrder(orderId);
+      if (res.success && res.data) {
+        setSelectedOrder(res.data);
+        setIsOrderModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to load order detail', err);
+    } finally {
+      setInspectingOrderId(null);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+      <div className="flex flex-col items-center justify-center min-h-[500px] gap-3">
         <Spinner size="lg" />
-        <p className="text-xs text-gray-500 font-medium">Loading Super Admin Executive Dashboard...</p>
+        <p className="text-xs text-gray-500 font-semibold tracking-wide">
+          Connecting to PostgreSQL & Synthesizing Executive Telemetry...
+        </p>
       </div>
     );
   }
 
   if (error || !metrics) {
     return (
-      <div className="max-w-lg mx-auto my-12 p-6 bg-white rounded-3xl border border-rose-100 shadow-sm text-center">
-        <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
-          <AlertCircle className="h-6 w-6" />
+      <div className="max-w-lg mx-auto my-16 p-8 bg-white rounded-3xl border border-rose-100 shadow-xl text-center">
+        <div className="h-14 w-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="h-7 w-7" />
         </div>
-        <h3 className="text-base font-bold text-gray-900 mb-1">Failed to Load Dashboard</h3>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Telemetry Pipeline Disrupted</h3>
         <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-          {error || 'Unable to load real-time metrics. Please verify your connection.'}
+          {error || 'Unable to establish live connection to the wholesale management database.'}
         </p>
-        <Button onClick={loadMetrics} className="inline-flex items-center gap-2 mx-auto">
+        <Button onClick={loadDashboardData} className="inline-flex items-center gap-2 mx-auto">
           <RefreshCw className="h-4 w-4" />
-          <span>Retry Loading Dashboard</span>
+          <span>Re-synchronize Dashboard</span>
         </Button>
       </div>
     );
   }
 
-  // 1. KPI Cards Setup
+  // 1. KPI Cards Setup (Creative Tim / Argon Dashboard Style)
   const pendingOrdersCount = metrics.pending_orders || 0;
   const pendingRevenueAmount = metrics.pending_order_volume || 0;
 
   const kpis = [
     {
-      label: 'Wholesale Products',
-      val: metrics.total_products || 0,
-      icon: Package,
-      trend: `${metrics.total_products || 0} Active SKUs Listed`,
-      trendColor: 'text-blue-600',
-      color: 'text-blue-600 bg-blue-50',
-    },
-    {
-      label: 'Low Stock Alerts',
-      val: metrics.low_stock_count || 0,
-      icon: AlertTriangle,
-      trend: (metrics.low_stock_count || 0) > 0 ? 'Requires stock replenishing' : 'All stock levels optimal',
-      trendColor: (metrics.low_stock_count || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600',
-      color: 'text-amber-600 bg-amber-50',
-      alert: (metrics.low_stock_count || 0) > 0,
-    },
-    {
-      label: 'Wholesale Orders Placed',
-      val: metrics.total_orders || 0,
-      icon: ShoppingCart,
-      trend:
-        pendingOrdersCount > 0
-          ? `${pendingOrdersCount} awaiting WhatsApp slip`
-          : `${metrics.completed_orders || 0} completed orders`,
-      trendColor: pendingOrdersCount > 0 ? 'text-amber-600 font-bold' : 'text-indigo-600',
-      color: 'text-indigo-600 bg-indigo-50',
-    },
-    {
-      label: 'Verified WhatsApp Income',
+      label: "Verified Wholesale Income",
       val: formatCurrency(metrics.total_order_volume || 0),
       icon: TrendingUp,
-      trend:
-        pendingRevenueAmount > 0
-          ? `${formatCurrency(pendingRevenueAmount)} pending verification`
-          : 'All payment slips verified',
-      trendColor: pendingRevenueAmount > 0 ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold',
-      color: 'text-emerald-600 bg-emerald-50',
+      trend: pendingRevenueAmount > 0
+        ? `+ ${formatCurrency(pendingRevenueAmount)} pending check`
+        : '+100% verified',
+      trendColor: pendingRevenueAmount > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold',
+      subtext: 'Confirmed via WhatsApp bank slips',
+      iconBg: 'bg-gradient-to-tl from-slate-900 to-slate-800 text-white shadow-slate-900/20',
+    },
+    {
+      label: "Wholesale Order Demand",
+      val: `${metrics.total_orders || 0}`,
+      icon: ShoppingCart,
+      trend: pendingOrdersCount > 0
+        ? `${pendingOrdersCount} slips awaiting WhatsApp check`
+        : `${metrics.completed_orders || 0} completed orders`,
+      trendColor: pendingOrdersCount > 0 ? 'text-amber-600 font-bold' : 'text-blue-600 font-bold',
+      subtext: 'Direct buyer storefront submissions',
+      iconBg: 'bg-gradient-to-tl from-blue-700 to-blue-600 text-white shadow-blue-600/20',
+    },
+    {
+      label: "Active Listed SKUs",
+      val: `${metrics.total_products || 0}`,
+      icon: Package,
+      trend: `${metrics.total_products || 0} active commercial products`,
+      trendColor: 'text-indigo-600 font-bold',
+      subtext: 'Wholesale fancy goods catalog',
+      iconBg: 'bg-gradient-to-tl from-indigo-700 to-indigo-600 text-white shadow-indigo-600/20',
+    },
+    {
+      label: "Warehouse Stock Sentinel",
+      val: `${metrics.low_stock_count || 0}`,
+      icon: AlertTriangle,
+      trend: (metrics.low_stock_count || 0) > 0 ? 'Stock replenishing required' : 'Optimal stock health',
+      trendColor: (metrics.low_stock_count || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold',
+      subtext: (metrics.low_stock_count || 0) > 0 ? 'Safety threshold breached' : 'Zero depleted inventory items',
+      iconBg: (metrics.low_stock_count || 0) > 0
+        ? 'bg-gradient-to-tl from-amber-600 to-amber-500 text-white shadow-amber-500/20'
+        : 'bg-gradient-to-tl from-emerald-600 to-emerald-500 text-white shadow-emerald-500/20',
     },
   ];
 
   const recentOrders = metrics.recent_orders || [];
   const lowStockAlerts = metrics.low_stock_alerts || [];
 
-  // Generate 7-day calendar baseline from real database records (0 if no orders yet)
+  // Generate 7-day calendar baseline from real database records
   const weeklySales = (() => {
     if (metrics.weekly_sales && metrics.weekly_sales.length === 7) {
       return metrics.weekly_sales;
@@ -175,24 +237,25 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  // SVG Chart Calculations
-  // Chart 1: Bar Chart (Order Volume)
-  const maxOrders = Math.max(...weeklySales.map((d) => d.orders), 5);
+  // SVG Chart Geometry Calculations
   const chartWidth = 280;
   const chartHeight = 110;
-  const barWidth = 18;
+  const maxOrders = Math.max(...weeklySales.map((d) => d.orders), 5);
+  const barWidth = 16;
   const barSpacing = chartWidth / 7;
 
-  // Chart 2: Line Chart (Verified WhatsApp Income)
+  // Chart 2 Smooth Spline Calculation
   const maxRevenue = Math.max(...weeklySales.map((d) => d.revenue), 1000);
   const linePoints = weeklySales.map((d, i) => {
     const x = 20 + i * ((chartWidth - 40) / 6);
     const y = 95 - (d.revenue / maxRevenue) * 75;
-    return { x, y, revenue: d.revenue, gross_demand: d.gross_demand || 0, date: d.date };
+    return { x, y, revenue: d.revenue, date: d.date };
   });
-  const linePathString = linePoints.map((p) => `${p.x},${p.y}`).join(' ');
 
-  // Chart 3: Stock Health Calculations
+  const smoothCurvePath = getSmoothCurvePath(linePoints);
+  const areaPathString = `${smoothCurvePath} L ${linePoints[linePoints.length - 1].x},95 L ${linePoints[0].x},95 Z`;
+
+  // Chart 3 Stock Health Calculations
   const totalProds = metrics.total_products || 0;
   const lowCount = metrics.low_stock_count || 0;
   const outCount = metrics.out_of_stock_count || 0;
@@ -203,32 +266,61 @@ export const DashboardPage: React.FC = () => {
   const outPct = totalProds > 0 ? Math.round((outCount / totalProds) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Super Admin Quick Actions Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-7 pb-10">
+      {/* Executive Breadcrumb & Header Title */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-bold text-gray-900 tracking-tight">Super Administrator Control Shortcuts</h2>
-          <p className="text-xs text-gray-500">Quickly add items, verify customer WhatsApp payments, or inspect stock</p>
+          <div className="flex items-center gap-2 text-xs text-gray-400 font-medium mb-1">
+            <span>Pages</span>
+            <span>/</span>
+            <span className="text-gray-700 font-semibold">Executive Dashboard</span>
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+            Super Administrator Executive Console
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Real-time wholesale telemetry, WhatsApp bank slip verification, and inventory health sentinel.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/admin/products"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Add New Item</span>
-          </Link>
+
+        {/* Live Database Pulse Badge & Quick Verification Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>PostgreSQL 18.7 Live</span>
+          </div>
 
           <Link
             to="/admin/orders"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all hover:scale-[1.02] ${
               pendingOrdersCount > 0
-                ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20'
             }`}
           >
             <CheckSquare className="h-3.5 w-3.5" />
             <span>Verify Orders {pendingOrdersCount > 0 && `(${pendingOrdersCount} Slips)`}</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Super Admin Quick Controls Floating Pill Strip */}
+      <div className="bg-white/80 backdrop-blur-md p-3.5 rounded-2xl border border-gray-100 shadow-[0_4px_20px_0_rgba(0,0,0,0.03)] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+          <Sparkles className="h-4 w-4 text-blue-600" />
+          <span>Quick Control Shortcuts:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/admin/products"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add New Item</span>
           </Link>
 
           <Link
@@ -236,7 +328,7 @@ export const DashboardPage: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors"
           >
             <Users className="h-3.5 w-3.5" />
-            <span>Manage Staff & Roles</span>
+            <span>Staff Permissions</span>
           </Link>
 
           <Link
@@ -244,7 +336,7 @@ export const DashboardPage: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors"
           >
             <Boxes className="h-3.5 w-3.5" />
-            <span>Inventory Quantities</span>
+            <span>Warehouse Stock</span>
           </Link>
 
           <Link
@@ -252,32 +344,33 @@ export const DashboardPage: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold transition-colors"
           >
             <FileText className="h-3.5 w-3.5" />
-            <span>Sales Reports & PDF</span>
+            <span>Financial PDF Reports</span>
           </Link>
         </div>
       </div>
 
-      {/* 1. KPI Cards Row (Matching Top Row in Reference Image) */}
+      {/* 1. TOP ROW: 4 Metric Cards (Creative Tim / Argon Dashboard Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
             <div
               key={idx}
-              className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+              className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                     {kpi.label}
                   </p>
-                  <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">{kpi.val}</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{kpi.val}</h3>
                 </div>
-                <div className={`p-3 rounded-2xl ${kpi.color}`}>
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform ${kpi.iconBg}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-1 text-[11px]">
+
+              <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between text-[11px]">
                 <span className={kpi.trendColor}>{kpi.trend}</span>
               </div>
             </div>
@@ -285,35 +378,36 @@ export const DashboardPage: React.FC = () => {
         })}
       </div>
 
-      {/* 2. Visual Diagrams & Charts Row (Matching Middle Row in Reference Image) */}
+      {/* 2. MIDDLE ROW: The Three Visual Diagram Cards (Matching Reference Middle Row) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Diagram 1: Weekly Wholesale Orders (Bar Chart - Emerald Green) */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+        {/* Card 1: Weekly Wholesale Orders (Emerald Green Rounded Bar Chart) */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Wholesale Orders</h4>
-                <p className="text-[11px] text-gray-500 mb-3">Storefront requests & WhatsApp inquiries</p>
+                <p className="text-[11px] text-gray-500 mb-3">Daily bulk inquiries & buyer requests</p>
               </div>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                Last 7 Days
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                7 Days
               </span>
             </div>
 
-            {/* SVG Bar Chart */}
+            {/* SVG Rounded Bar Chart */}
             <div className="relative pt-2 pb-1">
               {hoveredBarIdx !== null && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
                   {getDayLabel(weeklySales[hoveredBarIdx].date)}: {weeklySales[hoveredBarIdx].orders} Order(s)
                 </div>
               )}
+
               <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-32 overflow-visible">
-                {/* Horizontal guide lines */}
+                {/* Horizontal Guide Lines */}
                 <line x1="0" y1="20" x2={chartWidth} y2="20" stroke="#f1f5f9" strokeDasharray="3 3" />
                 <line x1="0" y1="55" x2={chartWidth} y2="55" stroke="#f1f5f9" strokeDasharray="3 3" />
                 <line x1="0" y1="90" x2={chartWidth} y2="90" stroke="#e2e8f0" />
 
-                {/* Vertical Bars */}
+                {/* Vertical Rounded Bars */}
                 {weeklySales.map((d, i) => {
                   const bHeight = Math.max(6, (d.orders / maxOrders) * 70);
                   const x = i * barSpacing + (barSpacing - barWidth) / 2;
@@ -333,12 +427,12 @@ export const DashboardPage: React.FC = () => {
                         width={barWidth}
                         height={bHeight}
                         rx={5}
-                        fill={isHovered ? '#16a34a' : '#22c55e'}
+                        fill={isHovered ? '#15803d' : '#22c55e'}
                         className="transition-all duration-200 hover:brightness-110"
                       />
                       <text
                         x={x + barWidth / 2}
-                        y="106"
+                        y="105"
                         textAnchor="middle"
                         fontSize="10"
                         fontWeight="600"
@@ -350,6 +444,7 @@ export const DashboardPage: React.FC = () => {
                   );
                 })}
               </svg>
+
               {totalWeeklyOrders === 0 && (
                 <p className="text-[10px] text-gray-400 text-center mt-1">
                   0 orders in the last 7 days. Incoming orders will chart here automatically.
@@ -363,54 +458,52 @@ export const DashboardPage: React.FC = () => {
               <Clock className="h-3.5 w-3.5 text-gray-400" />
               <span>Live customer order flow</span>
             </span>
-            <span className="font-semibold text-emerald-600">
+            <span className="font-bold text-emerald-600">
               {totalWeeklyOrders} total orders
             </span>
           </div>
         </div>
 
-        {/* Diagram 2: Verified Wholesale Revenue (Line Chart - Blue Area & Points) */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+        {/* Card 2: Daily Wholesale Income (Curved Spline Line Chart & Gradient Fill) */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Verified Wholesale Revenue</h4>
-                <p className="text-[11px] text-gray-500 mb-3">Confirmed via WhatsApp bank deposit slips</p>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Daily Wholesale Income</h4>
+                <p className="text-[11px] text-gray-500 mb-3">(+100%) confirmed WhatsApp bank receipts</p>
               </div>
               <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                 Rs. Verified
               </span>
             </div>
 
-            {/* SVG Line Chart */}
+            {/* SVG Smooth Bezier Spline Chart */}
             <div className="relative pt-2 pb-1">
               {hoveredLineIdx !== null && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-blue-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-blue-950 text-white text-[10px] font-bold px-2.5 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
                   {getDayLabel(weeklySales[hoveredLineIdx].date)}: {formatCurrency(weeklySales[hoveredLineIdx].revenue)}
                 </div>
               )}
+
               <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-32 overflow-visible">
                 <defs>
-                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
+                  <linearGradient id="revenueSplineGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.28" />
                     <stop offset="100%" stopColor="#2563eb" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
 
-                {/* Horizontal guide lines */}
+                {/* Horizontal Guide Lines */}
                 <line x1="0" y1="20" x2={chartWidth} y2="20" stroke="#f1f5f9" strokeDasharray="3 3" />
                 <line x1="0" y1="55" x2={chartWidth} y2="55" stroke="#f1f5f9" strokeDasharray="3 3" />
                 <line x1="0" y1="95" x2={chartWidth} y2="95" stroke="#e2e8f0" />
 
-                {/* Shaded Area Under Curve */}
-                <polygon
-                  points={`${linePoints[0].x},95 ${linePathString} ${linePoints[linePoints.length - 1].x},95`}
-                  fill="url(#revenueGradient)"
-                />
+                {/* Shaded Area Under Bezier Spline */}
+                <path d={areaPathString} fill="url(#revenueSplineGradient)" />
 
-                {/* Trend Polyline */}
-                <polyline
-                  points={linePathString}
+                {/* Smooth Bezier Spline Line */}
+                <path
+                  d={smoothCurvePath}
                   fill="none"
                   stroke="#2563eb"
                   strokeWidth="2.5"
@@ -418,7 +511,7 @@ export const DashboardPage: React.FC = () => {
                   strokeLinejoin="round"
                 />
 
-                {/* Interactive Data Point Dots */}
+                {/* Circular Nodes */}
                 {linePoints.map((p, idx) => {
                   const isHovered = hoveredLineIdx === idx;
                   return (
@@ -451,16 +544,17 @@ export const DashboardPage: React.FC = () => {
                   );
                 })}
               </svg>
+
               {(metrics.total_order_volume || 0) === 0 && (
                 <p className="text-[10px] text-gray-400 text-center mt-1">
-                  Rs. 0 verified income. When customer bank deposit slips are confirmed on WhatsApp, revenue charts here live.
+                  Rs. 0 verified income. Approved WhatsApp bank deposit slips chart here live.
                 </p>
               )}
             </div>
 
-            {/* Income Recognition Note */}
-            <div className="mt-2 p-2 bg-blue-50/60 rounded-xl border border-blue-100/70 text-[10px] text-blue-900 flex items-center justify-between">
-              <span className="font-medium">Pending Slip Verification:</span>
+            {/* Income Telemetry Sub-bar */}
+            <div className="mt-2 p-2 bg-blue-50/70 rounded-xl border border-blue-100 flex items-center justify-between text-[10px]">
+              <span className="font-semibold text-blue-900">Awaiting Slip Verification:</span>
               <span className="font-bold text-amber-700">{formatCurrency(pendingRevenueAmount)}</span>
             </div>
           </div>
@@ -468,7 +562,7 @@ export const DashboardPage: React.FC = () => {
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
-              <span>Realized bank account receipts</span>
+              <span>Realized bank receipts</span>
             </span>
             <span className="font-bold text-blue-700">
               {formatCurrency(metrics.total_order_volume || 0)}
@@ -476,13 +570,13 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Diagram 3: WhatsApp Slips & Stock Health Sentinel */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+        {/* Card 3: WhatsApp Slips & Stock Health Sentinel */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">WhatsApp Slips & Stock Monitor</h4>
-                <p className="text-[11px] text-gray-500 mb-3">Verification pipeline & warehouse stock</p>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Fulfillment & Stock Sentinel</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Verification pipeline & warehouse safety</p>
               </div>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -495,10 +589,10 @@ export const DashboardPage: React.FC = () => {
               </span>
             </div>
 
-            {/* Stage 1: WhatsApp Slip Verification Flow */}
+            {/* Verification Pipeline Stage Grid */}
             <div className="space-y-3 pt-1">
               <div>
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
                   WhatsApp Fulfillment Pipeline
                 </span>
                 <div className="grid grid-cols-3 gap-1.5 text-center">
@@ -522,7 +616,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Stage 2: Warehouse Stock Health Ratio */}
+              {/* Warehouse Stock Health Gauge */}
               <div className="pt-1">
                 <div className="flex justify-between text-xs font-semibold text-gray-700 mb-1">
                   <span>Warehouse Stock Ratio</span>
@@ -547,7 +641,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Status Breakdown Pills */}
+              {/* Breakdown Status Badges */}
               <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                 <div className="bg-gray-50 border border-gray-100 py-1 px-2 rounded-lg">
                   <span className="text-[9px] text-gray-500 block">Optimal</span>
@@ -568,116 +662,265 @@ export const DashboardPage: React.FC = () => {
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Real-time WhatsApp & stock monitor</span>
+              <span>Automated stock sentinel active</span>
             </span>
             <span className="font-semibold text-gray-600">{totalProds} total items</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Grid: Recent Wholesale Orders (2 cols) & Low Stock Watchlist (1 col) */}
+      {/* 3. BOTTOM ROW: Two Cards (Matching Reference Image Projects Table + Orders Overview) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Orders (2 cols) */}
-        <div className="lg:col-span-2">
-          <Card
-            title="Recent Wholesale Orders"
-            subtitle="Incoming customer order requests and WhatsApp verification"
-            action={
+        {/* Left Card (2 Columns): Wholesale Catalogue & Stock Performance (Projects equivalent) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-base font-bold text-gray-900 tracking-tight">
+                  Top Wholesale Products & Stock Ledger
+                </h4>
+                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span><strong>{metrics.total_products || 0} Listed SKUs</strong> active in the warehouse catalogue</span>
+                </p>
+              </div>
+
               <Link
-                to="/admin/orders"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                to="/admin/products"
+                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
               >
-                <span>Manage & Verify Orders</span>
+                <span>View Full Catalogue</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
-            }
-          >
-            {recentOrders.length === 0 ? (
-              <p className="text-xs text-gray-400 py-6 text-center">No wholesale orders placed yet.</p>
+            </div>
+
+            {/* Products Table */}
+            {topProducts.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Package className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                <p className="text-xs font-medium">No wholesale products added yet.</p>
+                <Link
+                  to="/admin/products"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-xs hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Create First Wholesale SKU</span>
+                </Link>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="text-gray-400 font-semibold border-b border-gray-100">
+                  <thead className="text-gray-400 font-bold border-b border-gray-100 uppercase text-[10px] tracking-wider">
                     <tr>
-                      <th className="pb-3">Order Number</th>
-                      <th className="pb-3">Customer / Shop</th>
-                      <th className="pb-3">Amount</th>
-                      <th className="pb-3">Status</th>
-                      <th className="pb-3">Date</th>
-                      <th className="pb-3 text-right">Verification</th>
+                      <th className="pb-3">Product / SKU</th>
+                      <th className="pb-3">Category</th>
+                      <th className="pb-3">Wholesale Rate</th>
+                      <th className="pb-3">Available Stock</th>
+                      <th className="pb-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-medium text-gray-700">
-                    {recentOrders.map((o) => (
-                      <tr key={o.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 font-bold text-gray-900 font-mono">{o.order_number}</td>
-                        <td className="py-3 font-semibold text-gray-800">{o.customer || 'Wholesale Buyer'}</td>
-                        <td className="py-3 font-extrabold text-gray-900">{formatCurrency(o.total_amount)}</td>
-                        <td className="py-3">
-                          <Badge status={o.status} />
-                        </td>
-                        <td className="py-3 text-gray-400">{o.created_at}</td>
-                        <td className="py-3 text-right">
-                          <Link
-                            to="/admin/orders"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
-                          >
-                            <span>Inspect & Verify</span>
-                            <ArrowRight className="h-3 w-3" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                    {topProducts.map((p) => {
+                      const avail = p.available_stock || 0;
+                      const threshold = p.low_stock_threshold || 5;
+                      const maxGauge = Math.max(avail, threshold * 3, 20);
+                      const stockPct = Math.min(100, Math.round((avail / maxGauge) * 100));
+
+                      return (
+                        <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                                {p.images && p.images.length > 0 ? (
+                                  <img src={p.images[0].image_url} alt={p.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <Package className="h-4 w-4 text-gray-400" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900 truncate max-w-[200px]">{p.name}</p>
+                                <p className="font-mono text-[10px] text-gray-400">SKU: {p.sku}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              {p.category_name || 'General'}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 font-extrabold text-gray-900">
+                            {formatCurrency(p.selling_price)}
+                            <span className="text-[10px] font-normal text-gray-400 ml-0.5">/{p.unit_of_measure}</span>
+                          </td>
+
+                          <td className="py-3.5">
+                            <div className="w-28 space-y-1">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className={`font-bold ${avail <= threshold ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                  {avail} Units
+                                </span>
+                                <span className="text-gray-400">{stockPct}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  style={{ width: `${stockPct}%` }}
+                                  className={`h-full rounded-full transition-all ${
+                                    avail === 0
+                                      ? 'bg-rose-500'
+                                      : avail <= threshold
+                                      ? 'bg-amber-500'
+                                      : 'bg-emerald-500'
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 text-right">
+                            <Link
+                              to="/admin/inventory"
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+                            >
+                              <span>Adjust Stock</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
-          </Card>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+            <span>Synchronized with warehouse inventory ledger</span>
+            <Link to="/admin/inventory" className="text-blue-600 font-bold hover:underline">
+              Inventory Ledger &rarr;
+            </Link>
+          </div>
         </div>
 
-        {/* Low Stock Alerts (1 col) */}
-        <div>
-          <Card
-            title="Low Stock Watchlist"
-            subtitle="Available warehouse stock quantities"
-            action={
+        {/* Right Card (1 Column): Orders Overview Timeline (Matching Reference Image Orders Overview) */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-base font-bold text-gray-900 tracking-tight">Orders Overview</h4>
+                <p className="text-xs text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                  <span>{metrics.total_orders || 0} orders recorded</span>
+                </p>
+              </div>
+
               <Link
-                to="/admin/inventory"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                to="/admin/orders"
+                className="text-xs font-bold text-blue-600 hover:text-blue-700"
               >
-                <span>Inventory Ledger</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                View All
               </Link>
-            }
-          >
-            {lowStockAlerts.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <Package className="h-8 w-8 mx-auto text-emerald-400 mb-2" />
-                <p className="text-xs font-medium text-emerald-700">Stock levels healthy</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">No products currently below safety threshold.</p>
+            </div>
+
+            {/* Vertical Timeline Feed */}
+            {recentOrders.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Bell className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                <p className="text-xs font-medium">No wholesale orders recorded yet.</p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  When retail buyers submit carts, orders will populate this live timeline.
+                </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {lowStockAlerts.map((item) => (
-                  <div
-                    key={item.product_id}
-                    className="p-3 bg-amber-50/50 rounded-xl border border-amber-100/80 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-gray-900 truncate max-w-[180px]">{item.product_name}</p>
-                      <p className="text-[11px] text-gray-500 font-mono">SKU: {item.sku}</p>
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                {recentOrders.map((o) => {
+                  const isPending = o.status === 'PENDING';
+                  const isConfirmed = o.status === 'CONFIRMED' || o.status === 'PROCESSING';
+                  const isCompleted = o.status === 'COMPLETED' || o.status === 'DELIVERED';
+
+                  return (
+                    <div key={o.id} className="relative group">
+                      {/* Timeline Node Icon */}
+                      <div
+                        className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center ring-4 ring-white ${
+                          isPending
+                            ? 'bg-amber-500 text-white'
+                            : isConfirmed
+                            ? 'bg-blue-600 text-white'
+                            : isCompleted
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-400 text-white'
+                        }`}
+                      >
+                        {isPending ? (
+                          <MessageSquare className="h-2.5 w-2.5" />
+                        ) : isConfirmed ? (
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                        ) : (
+                          <Bell className="h-2.5 w-2.5" />
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-gray-900 font-mono">
+                            {formatCurrency(o.total_amount)}
+                          </p>
+                          <span className="text-[10px] text-gray-400">{o.created_at}</span>
+                        </div>
+
+                        <p className="text-xs text-gray-600 font-medium mt-0.5">
+                          Order #{o.order_number} &bull; {o.customer || 'Wholesale Buyer'}
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <Badge status={o.status} />
+
+                          <button
+                            type="button"
+                            onClick={() => handleInspectOrder(o.id)}
+                            disabled={inspectingOrderId === o.id}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            {inspectingOrderId === o.id ? 'Loading...' : 'Inspect & Verify &rarr;'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-xs font-extrabold text-amber-700">{item.available_stock} Units</span>
-                      <p className="text-[10px] text-gray-400">Alert at: {item.low_stock_threshold}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-          </Card>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100 text-[11px] text-gray-400 flex items-center justify-between">
+            <span>Direct WhatsApp slip verification</span>
+            <Link to="/admin/orders" className="text-blue-600 font-bold hover:underline">
+              Fulfillment Pipeline &rarr;
+            </Link>
+          </div>
         </div>
       </div>
+
+      {/* Direct Order Verification Modal from Dashboard */}
+      {selectedOrder && (
+        <OrderDetailModal
+          isOpen={isOrderModalOpen}
+          onClose={() => {
+            setIsOrderModalOpen(false);
+            setSelectedOrder(null);
+          }}
+          onSuccess={() => {
+            loadDashboardData();
+            setIsOrderModalOpen(false);
+            setSelectedOrder(null);
+          }}
+          order={selectedOrder}
+        />
+      )}
     </div>
   );
 };
