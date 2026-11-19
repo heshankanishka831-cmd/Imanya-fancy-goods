@@ -207,9 +207,13 @@ export const ProductListPage: React.FC = () => {
       <ProductModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={loadProducts}
+        onSuccess={() => {
+          loadProducts();
+          loadCategories();
+        }}
         productToEdit={editingProduct}
         categories={categories}
+        onCategoriesChange={loadCategories}
       />
     </div>
   );
