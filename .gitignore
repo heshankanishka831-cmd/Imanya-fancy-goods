@@ -1,0 +1,18 @@
+# Binaries and build artifacts
+backend/tmp/
+backend/bin/
+backend/uploads/
+frontend/dist/
+frontend/node_modules/
+node_modules/
+
+# Environment files
+*.env
+!.env.example
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
