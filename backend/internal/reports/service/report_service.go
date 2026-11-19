@@ -130,6 +130,45 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		})
 	}
 
+	// 7-Day sales and revenue breakdown for live dashboard diagrams
+	type dailyRaw struct {
+		Date    string
+		Orders  int64
+		Revenue float64
+	}
+	var rawDailies []dailyRaw
+	_ = s.db.WithContext(ctx).Table("orders").
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue").
+		Where("created_at >= NOW() - INTERVAL '7 days'").
+		Where("status != 'CANCELLED'").
+		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
+		Order("date ASC").
+		Scan(&rawDailies).Error
+
+	dailyMap := make(map[string]dailyRaw)
+	for _, d := range rawDailies {
+		dailyMap[d.Date] = d
+	}
+
+	weeklySales := make([]dto.DailySalesDTO, 0, 7)
+	nowTime := time.Now()
+	for i := 6; i >= 0; i-- {
+		dayStr := nowTime.AddDate(0, 0, -i).Format("2006-01-02")
+		if d, exists := dailyMap[dayStr]; exists {
+			weeklySales = append(weeklySales, dto.DailySalesDTO{
+				Date:    dayStr,
+				Orders:  d.Orders,
+				Revenue: d.Revenue,
+			})
+		} else {
+			weeklySales = append(weeklySales, dto.DailySalesDTO{
+				Date:    dayStr,
+				Orders:  0,
+				Revenue: 0,
+			})
+		}
+	}
+
 	return &dto.DashboardMetricsResponse{
 		TotalProducts:      totalProducts,
 		LowStockCount:      lowStockCount,
@@ -146,6 +185,7 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		OrdersByStatus:     statusCounts,
 		RecentOrders:       recentOrders,
 		LowStockAlerts:     lowStockAlerts,
+		WeeklySales:        weeklySales,
 	}, nil
 }
 

@@ -218,6 +218,11 @@ export interface DashboardMetrics {
     available_stock: number;
     low_stock_threshold: number;
   }[];
+  weekly_sales?: {
+    date: string;
+    orders: number;
+    revenue: number;
+  }[];
 }
 
 export interface AuditLog {

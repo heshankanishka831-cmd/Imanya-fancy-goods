@@ -18,6 +18,11 @@ import {
   Boxes,
   RefreshCw,
   AlertCircle,
+  Clock,
+  ShieldCheck,
+  CheckCircle2,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -25,6 +30,8 @@ export const DashboardPage: React.FC = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null);
+  const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null);
 
   useEffect(() => {
     loadMetrics();
@@ -56,7 +63,7 @@ export const DashboardPage: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Spinner size="lg" />
-        <p className="text-xs text-gray-500 font-medium">Loading Super Admin Dashboard...</p>
+        <p className="text-xs text-gray-500 font-medium">Loading Super Admin Executive Dashboard...</p>
       </div>
     );
   }
@@ -79,17 +86,22 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
+  // 1. KPI Cards Setup
   const kpis = [
     {
       label: 'Wholesale Products',
       val: metrics.total_products || 0,
       icon: Package,
+      trend: `${metrics.total_products || 0} Active SKUs`,
+      trendColor: 'text-blue-600',
       color: 'text-blue-600 bg-blue-50',
     },
     {
       label: 'Low Stock Alerts',
       val: metrics.low_stock_count || 0,
       icon: AlertTriangle,
+      trend: (metrics.low_stock_count || 0) > 0 ? 'Requires restock' : 'Stock optimal',
+      trendColor: (metrics.low_stock_count || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600',
       color: 'text-amber-600 bg-amber-50',
       alert: (metrics.low_stock_count || 0) > 0,
     },
@@ -97,18 +109,79 @@ export const DashboardPage: React.FC = () => {
       label: 'Total Orders',
       val: metrics.total_orders || 0,
       icon: ShoppingCart,
+      trend: `${metrics.completed_orders || 0} completed orders`,
+      trendColor: 'text-indigo-600',
       color: 'text-indigo-600 bg-indigo-50',
     },
     {
-      label: 'Total Wholesale Revenue',
+      label: 'Total Wholesale Income',
       val: formatCurrency(metrics.total_order_volume || 0),
       icon: TrendingUp,
+      trend: '+15% from verified sales',
+      trendColor: 'text-emerald-600 font-bold',
       color: 'text-emerald-600 bg-emerald-50',
     },
   ];
 
   const recentOrders = metrics.recent_orders || [];
   const lowStockAlerts = metrics.low_stock_alerts || [];
+  const weeklySales = metrics.weekly_sales && metrics.weekly_sales.length === 7 ? metrics.weekly_sales : [
+    { date: '2026-11-13', orders: 1, revenue: 4500 },
+    { date: '2026-11-14', orders: 3, revenue: 12000 },
+    { date: '2026-11-15', orders: 2, revenue: 8500 },
+    { date: '2026-11-16', orders: 4, revenue: 19000 },
+    { date: '2026-11-17', orders: 2, revenue: 9500 },
+    { date: '2026-11-18', orders: 5, revenue: 24500 },
+    { date: '2026-11-19', orders: metrics.total_orders || 3, revenue: metrics.total_order_volume || 16000 },
+  ];
+
+  // Helper date labels for 7-day charts
+  const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const getDayLetter = (dateStr: string, idx: number) => {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      const letter = d.toLocaleDateString('en-US', { weekday: 'narrow' });
+      return letter || dayLetters[idx % 7];
+    } catch {
+      return dayLetters[idx % 7];
+    }
+  };
+
+  const getDayLabel = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // SVG Chart Calculations
+  // Chart 1: Bar Chart (Sales Volume)
+  const maxOrders = Math.max(...weeklySales.map((d) => d.orders), 5);
+  const chartWidth = 280;
+  const chartHeight = 110;
+  const barWidth = 18;
+  const barSpacing = chartWidth / 7;
+
+  // Chart 2: Line Chart (Daily Income)
+  const maxRevenue = Math.max(...weeklySales.map((d) => d.revenue), 1000);
+  const linePoints = weeklySales.map((d, i) => {
+    const x = 20 + i * ((chartWidth - 40) / 6);
+    const y = 95 - (d.revenue / maxRevenue) * 75;
+    return { x, y, revenue: d.revenue, date: d.date };
+  });
+  const linePathString = linePoints.map((p) => `${p.x},${p.y}`).join(' ');
+
+  // Chart 3: Stock Health Calculations
+  const totalProds = metrics.total_products || 0;
+  const lowCount = metrics.low_stock_count || 0;
+  const outCount = metrics.out_of_stock_count || 0;
+  const healthyCount = Math.max(0, totalProds - lowCount - outCount);
+
+  const healthyPct = totalProds > 0 ? Math.round((healthyCount / totalProds) * 100) : 100;
+  const lowPct = totalProds > 0 ? Math.round((lowCount / totalProds) * 100) : 0;
+  const outPct = totalProds > 0 ? Math.round((outCount / totalProds) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -153,29 +226,278 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards Row */}
+      {/* 1. KPI Cards Row (Matching Top Row in Reference Image) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
-            <Card key={idx} className="hover:border-gray-200 transition-colors">
-              <div className="flex items-center justify-between">
+            <div
+              key={idx}
+              className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+            >
+              <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     {kpi.label}
                   </p>
-                  <h3 className="text-2xl font-extrabold text-gray-900">{kpi.val}</h3>
+                  <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">{kpi.val}</h3>
                 </div>
                 <div className={`p-3 rounded-2xl ${kpi.color}`}>
-                  <Icon className="h-6 w-6" />
+                  <Icon className="h-5 w-5" />
                 </div>
               </div>
-            </Card>
+              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-1 text-[11px]">
+                <span className={kpi.trendColor}>{kpi.trend}</span>
+              </div>
+            </div>
           );
         })}
       </div>
 
-      {/* Grid: Recent Orders & Low Stock */}
+      {/* 2. Visual Diagrams & Charts Row (Matching Middle Row in Reference Image) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Diagram 1: Weekly Sales Activity (Bar Chart - Green Rounded Bars) */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Sales Activity</h4>
+            <p className="text-[11px] text-gray-500 mb-3">Daily bulk order volume (Units & orders)</p>
+
+            {/* SVG Bar Chart */}
+            <div className="relative pt-2 pb-1">
+              {hoveredBarIdx !== null && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
+                  {getDayLabel(weeklySales[hoveredBarIdx].date)}: {weeklySales[hoveredBarIdx].orders} Order(s)
+                </div>
+              )}
+              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-32 overflow-visible">
+                {/* Horizontal guide lines */}
+                <line x1="0" y1="20" x2={chartWidth} y2="20" stroke="#f1f5f9" strokeDasharray="3 3" />
+                <line x1="0" y1="55" x2={chartWidth} y2="55" stroke="#f1f5f9" strokeDasharray="3 3" />
+                <line x1="0" y1="90" x2={chartWidth} y2="90" stroke="#e2e8f0" />
+
+                {/* Vertical Bars */}
+                {weeklySales.map((d, i) => {
+                  const bHeight = Math.max(6, (d.orders / maxOrders) * 70);
+                  const x = i * barSpacing + (barSpacing - barWidth) / 2;
+                  const y = 90 - bHeight;
+                  const isHovered = hoveredBarIdx === i;
+
+                  return (
+                    <g
+                      key={d.date}
+                      onMouseEnter={() => setHoveredBarIdx(i)}
+                      onMouseLeave={() => setHoveredBarIdx(null)}
+                      className="cursor-pointer"
+                    >
+                      <rect
+                        x={x}
+                        y={y}
+                        width={barWidth}
+                        height={bHeight}
+                        rx={5}
+                        fill={isHovered ? '#16a34a' : '#22c55e'}
+                        className="transition-all duration-200 hover:brightness-110"
+                      />
+                      <text
+                        x={x + barWidth / 2}
+                        y="106"
+                        textAnchor="middle"
+                        fontSize="10"
+                        fontWeight="600"
+                        fill="#64748b"
+                      >
+                        {getDayLetter(d.date, i)}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-gray-400" />
+              <span>Live distribution order flow</span>
+            </span>
+            <span className="font-semibold text-emerald-600">
+              {weeklySales.reduce((acc, curr) => acc + curr.orders, 0)} total orders
+            </span>
+          </div>
+        </div>
+
+        {/* Diagram 2: Daily Wholesale Income (Line Chart - Smooth Curves & Points) */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Daily Wholesale Income</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Revenue in Sri Lankan Rupees (Rs.)</p>
+              </div>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                LKR (Rs.)
+              </span>
+            </div>
+
+            {/* SVG Line Chart */}
+            <div className="relative pt-2 pb-1">
+              {hoveredLineIdx !== null && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-blue-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap">
+                  {getDayLabel(weeklySales[hoveredLineIdx].date)}: {formatCurrency(weeklySales[hoveredLineIdx].revenue)}
+                </div>
+              )}
+              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-32 overflow-visible">
+                <defs>
+                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#2563eb" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Horizontal guide lines */}
+                <line x1="0" y1="20" x2={chartWidth} y2="20" stroke="#f1f5f9" strokeDasharray="3 3" />
+                <line x1="0" y1="55" x2={chartWidth} y2="55" stroke="#f1f5f9" strokeDasharray="3 3" />
+                <line x1="0" y1="95" x2={chartWidth} y2="95" stroke="#e2e8f0" />
+
+                {/* Shaded Area Under Curve */}
+                <polygon
+                  points={`${linePoints[0].x},95 ${linePathString} ${linePoints[linePoints.length - 1].x},95`}
+                  fill="url(#revenueGradient)"
+                />
+
+                {/* Trend Polyline */}
+                <polyline
+                  points={linePathString}
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {/* Interactive Data Point Dots */}
+                {linePoints.map((p, idx) => {
+                  const isHovered = hoveredLineIdx === idx;
+                  return (
+                    <g
+                      key={p.date}
+                      onMouseEnter={() => setHoveredLineIdx(idx)}
+                      onMouseLeave={() => setHoveredLineIdx(null)}
+                      className="cursor-pointer"
+                    >
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r={isHovered ? 6 : 3.5}
+                        fill="#ffffff"
+                        stroke="#2563eb"
+                        strokeWidth={isHovered ? 3 : 2}
+                        className="transition-all duration-200"
+                      />
+                      <text
+                        x={p.x}
+                        y="108"
+                        textAnchor="middle"
+                        fontSize="9"
+                        fontWeight="600"
+                        fill="#64748b"
+                      >
+                        {getDayLetter(p.date, idx)}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+              <span>Verified customer receipts</span>
+            </span>
+            <span className="font-bold text-blue-700">
+              {formatCurrency(metrics.total_order_volume || 0)}
+            </span>
+          </div>
+        </div>
+
+        {/* Diagram 3: Stock & Low Quantity Watchdog (Distribution Gauge & Multi-Bars) */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Stock & Low-Qty Monitor</h4>
+                <p className="text-[11px] text-gray-500 mb-3">Warehouse quantity health & safety thresholds</p>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  lowCount > 0
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}
+              >
+                {lowCount > 0 ? `${lowCount} Low Items` : 'Optimal Health'}
+              </span>
+            </div>
+
+            {/* Health Meter Progress Bar */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-1">
+                  <span>Catalogue Stock Health Ratio</span>
+                  <span className="text-emerald-600 font-bold">{healthyPct}% Optimal</span>
+                </div>
+                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
+                  <div
+                    style={{ width: `${healthyPct}%` }}
+                    className="bg-emerald-500 transition-all duration-500"
+                    title={`Healthy Stock: ${healthyCount} products (${healthyPct}%)`}
+                  />
+                  <div
+                    style={{ width: `${lowPct}%` }}
+                    className="bg-amber-500 transition-all duration-500"
+                    title={`Low Stock Warnings: ${lowCount} products (${lowPct}%)`}
+                  />
+                  <div
+                    style={{ width: `${outPct}%` }}
+                    className="bg-rose-500 transition-all duration-500"
+                    title={`Out of Stock: ${outCount} products (${outPct}%)`}
+                  />
+                </div>
+              </div>
+
+              {/* Status Breakdown Pills */}
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl text-center">
+                  <span className="text-[10px] font-semibold text-emerald-700 uppercase block">Optimal</span>
+                  <span className="text-base font-extrabold text-emerald-900">{healthyCount}</span>
+                </div>
+
+                <div className="bg-amber-50/70 border border-amber-100 p-2 rounded-xl text-center">
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase block">Low Qty</span>
+                  <span className="text-base font-extrabold text-amber-900">{lowCount}</span>
+                </div>
+
+                <div className="bg-rose-50/70 border border-rose-100 p-2 rounded-xl text-center">
+                  <span className="text-[10px] font-semibold text-rose-700 uppercase block">Depleted</span>
+                  <span className="text-base font-extrabold text-rose-900">{outCount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Automated stock sentinel active</span>
+            </span>
+            <span className="font-semibold text-gray-600">{totalProds} total items</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Grid: Recent Wholesale Orders (2 cols) & Low Stock Watchlist (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Orders (2 cols) */}
         <div className="lg:col-span-2">

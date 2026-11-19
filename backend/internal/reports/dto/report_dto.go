@@ -16,6 +16,7 @@ type DashboardMetricsResponse struct {
 	OrdersByStatus     map[string]int64 `json:"orders_by_status"`
 	RecentOrders       []RecentOrderDTO `json:"recent_orders"`
 	LowStockAlerts     []LowStockDTO    `json:"low_stock_alerts"`
+	WeeklySales        []DailySalesDTO  `json:"weekly_sales"`
 }
 
 type RecentOrderDTO struct {
