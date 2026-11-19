@@ -32,7 +32,7 @@ export const LoginPage: React.FC = () => {
   return (
     <div>
       <h3 className="text-xl font-bold text-gray-900 mb-1">Staff Sign In</h3>
-      <p className="text-xs text-gray-500 mb-6">Enter your credentials to access administrative systems</p>
+      <p className="text-xs text-gray-500 mb-6">Imanya Fancy Goods Management Portal</p>
 
       {error && (
         <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium">

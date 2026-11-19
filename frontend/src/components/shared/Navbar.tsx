@@ -19,9 +19,9 @@ export const Navbar: React.FC = () => {
             <Package className="h-5 w-5" />
           </div>
           <div>
-            <span className="text-lg font-bold text-gray-900 tracking-tight">WholesaleHub</span>
+            <span className="text-lg font-bold text-gray-900 tracking-tight">Imanya Fancy Goods</span>
             <span className="hidden sm:inline-block ml-2 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-              Direct Import
+              Wholesale & Imports
             </span>
           </div>
         </Link>

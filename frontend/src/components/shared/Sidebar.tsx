@@ -40,8 +40,8 @@ export const Sidebar: React.FC = () => {
             <Package className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-white tracking-tight">Wholesale Admin</h1>
-            <p className="text-[11px] text-slate-400">Enterprise Control</p>
+            <h1 className="text-base font-bold text-white tracking-tight">Imanya Fancy Goods</h1>
+            <p className="text-[11px] text-slate-400">Admin & Distribution Portal</p>
           </div>
         </div>
 

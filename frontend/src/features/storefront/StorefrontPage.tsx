@@ -67,13 +67,13 @@ export const StorefrontPage: React.FC = () => {
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold text-blue-200 border border-white/10 mb-4">
             <Sparkles className="h-3.5 w-3.5 text-blue-300" />
-            <span>Direct Wholesale Catalogue</span>
+            <span>Imanya Fancy Goods Wholesale</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-3">
-            Wholesale Goods & Bulk Import Distribution
+            Imanya Fancy Goods & Wholesale Distribution
           </h1>
           <p className="text-sm sm:text-base text-blue-100 font-normal leading-relaxed">
-            Directly browse commercial product inventories, review live stock availability, build custom wholesale orders, and connect via WhatsApp for immediate fulfillment.
+            Browse our imported fancy goods, fashion accessories, wholesale gifts, and premium commercial products. Check live stock, add items to cart, and send instant wholesale orders directly via WhatsApp.
           </p>
         </div>
       </div>

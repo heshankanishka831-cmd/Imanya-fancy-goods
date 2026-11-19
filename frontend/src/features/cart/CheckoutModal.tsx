@@ -72,7 +72,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
             Order #{confirmedOrder.order_number} Confirmed!
           </h4>
           <p className="text-sm text-gray-600 mb-6">
-            Your order has been safely recorded in our database. Our logistics team will review and contact you shortly.
+            Your order has been recorded in our system. Send the summary directly to Imanya Fancy Goods on WhatsApp for instant confirmation.
           </p>
 
           <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left border border-gray-100">

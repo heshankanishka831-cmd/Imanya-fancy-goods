@@ -12,9 +12,9 @@ export const AuthLayout: React.FC = () => {
             <div className="h-10 w-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
               <Package className="h-6 w-6" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">WholesaleHub</span>
+            <span className="text-2xl font-bold tracking-tight">Imanya Fancy Goods</span>
           </Link>
-          <p className="text-sm text-slate-400">Staff & Management Authorization Gateway</p>
+          <p className="text-sm text-slate-400">Staff & Management Portal</p>
         </div>
 
         {/* Auth Body */}

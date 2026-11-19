@@ -1,6 +1,6 @@
-# Import & Wholesale Distribution Management System
+# Imanya Fancy Goods - Import & Wholesale Distribution Management System
 
-A production-grade, secure, web-based management system built specifically for commercial import and wholesale distribution operations.
+A production-grade, secure, web-based management system built specifically for **Imanya Fancy Goods** import and wholesale distribution operations.
 
 ## Architecture & Technology Stack
 
