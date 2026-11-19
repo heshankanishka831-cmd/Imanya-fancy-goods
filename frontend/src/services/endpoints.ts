@@ -251,3 +251,26 @@ export const adminApi = {
     return res.data;
   },
 };
+
+export const customerApi = {
+  getProfile: async () => {
+    const res = await api.get<ApiResponse<Customer>>('/customer/profile');
+    return res.data;
+  },
+  updateProfile: async (data: { business_name?: string; phone?: string; delivery_address?: string }) => {
+    const res = await api.put<ApiResponse<Customer>>('/customer/profile', data);
+    return res.data;
+  },
+  getMyOrders: async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
+    const res = await api.get<ApiResponse<Order[]>>('/customer/orders', { params });
+    return res.data;
+  },
+  getMyOrder: async (id: string) => {
+    const res = await api.get<ApiResponse<Order>>(`/customer/orders/${id}`);
+    return res.data;
+  },
+  getWhatsAppLink: async (id: string) => {
+    const res = await api.get<ApiResponse<{ whatsapp_url: string }>>(`/customer/orders/${id}/whatsapp`);
+    return res.data;
+  },
+};

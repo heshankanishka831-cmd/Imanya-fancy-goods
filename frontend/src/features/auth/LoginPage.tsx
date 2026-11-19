@@ -22,9 +22,9 @@ export const LoginPage: React.FC = () => {
     try {
       const loggedUser = await login(identifier.trim(), password);
       // Automatic role-based routing:
-      // Customers go to the Wholesale Storefront; Staff and Super Admins go to the Management Dashboard
+      // Customers go to the Wholesale Customer Dashboard; Staff and Super Admins go to the Management Dashboard
       if (loggedUser.role_name === 'Customer') {
-        navigate('/');
+        navigate('/customer/dashboard');
       } else {
         navigate('/admin/dashboard');
       }

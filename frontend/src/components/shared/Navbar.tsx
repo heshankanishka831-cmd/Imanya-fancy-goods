@@ -54,12 +54,19 @@ export const Navbar: React.FC = () => {
           {isAuthenticated ? (
             isCustomer ? (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-100 text-xs">
+                <Link
+                  to="/customer/dashboard"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-xs transition-colors"
+                  title="Open Wholesale Customer Portal"
+                >
                   <Store className="h-3.5 w-3.5 text-blue-600" />
-                  <span className="font-semibold text-blue-900">
+                  <span className="font-semibold text-blue-900 hidden sm:inline">
                     {customerProfile?.business_name || user?.first_name}
                   </span>
-                </div>
+                  <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-md font-bold">
+                    Portal
+                  </span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors"

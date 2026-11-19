@@ -91,7 +91,7 @@ func SetupRouter(
 		cust := v1.Group("/customer", middleware.AuthMiddleware(cfg.JWTSecret))
 		{
 			cust.GET("/profile", custHdlr.GetMyProfile)
-			pub.PUT("/profile", custHdlr.UpdateMyProfile)
+			cust.PUT("/profile", custHdlr.UpdateMyProfile)
 			cust.GET("/orders", oHdlr.ListOrders)
 			cust.GET("/orders/:id", oHdlr.GetOrder)
 			cust.GET("/orders/:id/whatsapp", oHdlr.GetWhatsAppLink)

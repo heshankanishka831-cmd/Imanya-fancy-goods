@@ -204,18 +204,27 @@ export const StorefrontPage: React.FC = () => {
               </Link>
             </div>
           ) : user?.role_name === 'Customer' ? (
-            <div className="inline-flex items-center gap-3 p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 text-xs text-blue-100">
-              <div className="h-9 w-9 rounded-xl bg-blue-500/30 flex items-center justify-center text-white">
-                <Store className="h-5 w-5" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 text-xs text-blue-100">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/30 flex items-center justify-center text-white shrink-0">
+                  <Store className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    Welcome back, {customerProfile?.business_name || user?.first_name}!
+                  </p>
+                  <p className="text-blue-200 text-xs">
+                    Wholesale trade pricing enabled. Manage bulk orders, invoices, and bank slips.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-white text-sm">
-                  Welcome back, {customerProfile?.business_name || user?.first_name}!
-                </p>
-                <p className="text-blue-200 text-xs">
-                  Wholesale trade pricing enabled. Select carton or unit quantities to submit orders via WhatsApp.
-                </p>
-              </div>
+              <Link
+                to="/customer/dashboard"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xs transition-all hover:scale-105 shrink-0"
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>My Wholesale Portal & Orders &rarr;</span>
+              </Link>
             </div>
           ) : (
             <div className="inline-flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/20 backdrop-blur-md border border-amber-400/30 text-xs text-amber-100">

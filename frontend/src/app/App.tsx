@@ -24,6 +24,7 @@ import { UserListPage } from '../features/users/UserListPage';
 import { AuditLogPage } from '../features/audit/AuditLogPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
+import { CustomerDashboardPage } from '../features/customer/CustomerDashboardPage';
 
 export const App: React.FC = () => {
   return (
@@ -31,9 +32,10 @@ export const App: React.FC = () => {
       <AuthProvider>
         <CartProvider>
           <Routes>
-            {/* Customer Storefront Routes */}
+            {/* Customer Storefront & Portal Routes */}
             <Route element={<StorefrontLayout />}>
               <Route path="/" element={<StorefrontPage />} />
+              <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
             </Route>
 
             {/* Authentication Gateway */}
