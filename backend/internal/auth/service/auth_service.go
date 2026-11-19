@@ -55,7 +55,13 @@ func NewAuthService(
 func (s *authService) Login(ctx context.Context, req *dto.LoginRequest, ip, ua string) (*dto.AuthResponse, error) {
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, errors.New("invalid email address or password")
+		// Attempt lookup by username
+		var userByUsername *userModel.User
+		userByUsername, err = s.userRepo.GetByUsername(ctx, req.Email)
+		if err != nil {
+			return nil, errors.New("invalid email address/username or password")
+		}
+		user = userByUsername
 	}
 
 	if !user.IsActive {
@@ -64,7 +70,7 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest, ip, ua s
 
 	// Verify bcrypt password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, errors.New("invalid email address or password")
+		return nil, errors.New("invalid email address/username or password")
 	}
 
 	expiresAt := time.Now().Add(s.expirationTime)

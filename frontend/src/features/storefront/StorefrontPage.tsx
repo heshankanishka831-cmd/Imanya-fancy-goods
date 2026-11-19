@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { publicApi } from '../../services/endpoints';
 import { Product, Category } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useCart } from '../cart/CartContext';
-import { Search, ShoppingCart, Check, Package, Sparkles } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
+import { Search, ShoppingCart, Check, Package, Sparkles, UserPlus, LogIn, ShieldCheck, Store } from 'lucide-react';
 import { Spinner } from '../../components/ui/Spinner';
 
 export const StorefrontPage: React.FC = () => {
   const { addToCart } = useCart();
+  const { isAuthenticated, user, customerProfile } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -72,9 +75,72 @@ export const StorefrontPage: React.FC = () => {
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-3">
             Imanya Fancy Goods & Wholesale Distribution
           </h1>
-          <p className="text-sm sm:text-base text-blue-100 font-normal leading-relaxed">
+          <p className="text-sm sm:text-base text-blue-100 font-normal leading-relaxed mb-6">
             Browse our imported fancy goods, fashion accessories, wholesale gifts, and premium commercial products. Check live stock, add items to cart, and send instant wholesale orders directly via WhatsApp.
           </p>
+
+          {/* Quick Action Navigation Bar */}
+          {!isAuthenticated ? (
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-blue-900 font-bold text-sm shadow-md hover:bg-blue-50 transition-all hover:scale-[1.02]"
+              >
+                <UserPlus className="h-4 w-4 text-blue-600" />
+                <span>Register Wholesale Account</span>
+              </Link>
+              <Link
+                to="/login?tab=customer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white font-semibold text-sm border border-blue-400/40 backdrop-blur-sm transition-all"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Customer Sign In</span>
+              </Link>
+              <Link
+                to="/login?tab=admin"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-black/20 hover:bg-black/30 text-blue-200 text-xs font-medium border border-white/10 transition-all"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-blue-300" />
+                <span>Staff Portal</span>
+              </Link>
+            </div>
+          ) : user?.role_name === 'Customer' ? (
+            <div className="inline-flex items-center gap-3 p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 text-xs text-blue-100">
+              <div className="h-8 w-8 rounded-xl bg-blue-500/30 flex items-center justify-center text-white">
+                <Store className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">
+                  Welcome, {customerProfile?.business_name || user?.first_name}!
+                </p>
+                <p className="text-blue-200">
+                  You are signed in as a verified Wholesale Customer. Add items to your cart to submit orders via WhatsApp.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-3 p-3 rounded-2xl bg-amber-500/20 backdrop-blur-md border border-amber-400/30 text-xs text-amber-100">
+              <div className="h-8 w-8 rounded-xl bg-amber-500/30 flex items-center justify-center text-white">
+                <ShieldCheck className="h-4 w-4 text-amber-300" />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    Logged in as {user?.role_name} ({user?.first_name})
+                  </p>
+                  <p className="text-amber-200">
+                    Switch to the administrative dashboard to manage products, inventory, and staff.
+                  </p>
+                </div>
+                <Link
+                  to="/admin/dashboard"
+                  className="px-3 py-1.5 bg-white text-slate-900 font-bold rounded-lg text-xs hover:bg-amber-100 transition-colors whitespace-nowrap"
+                >
+                  Open Dashboard &rarr;
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

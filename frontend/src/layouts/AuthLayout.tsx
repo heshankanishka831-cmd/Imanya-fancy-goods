@@ -14,7 +14,7 @@ export const AuthLayout: React.FC = () => {
             </div>
             <span className="text-2xl font-bold tracking-tight">Imanya Fancy Goods</span>
           </Link>
-          <p className="text-sm text-slate-400">Staff & Management Portal</p>
+          <p className="text-sm text-slate-400">Wholesale Customer & Management Portal</p>
         </div>
 
         {/* Auth Body */}
