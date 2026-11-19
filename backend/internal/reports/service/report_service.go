@@ -76,7 +76,7 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		Limit(5).
 		Scan(&recentRaw).Error
 
-	var recentOrders []dto.RecentOrderDTO
+	recentOrders := make([]dto.RecentOrderDTO, 0)
 	for _, r := range recentRaw {
 		recentOrders = append(recentOrders, dto.RecentOrderDTO{
 			ID:          r.ID,
@@ -105,7 +105,7 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		Limit(5).
 		Scan(&rawLow).Error
 
-	var lowStockAlerts []dto.LowStockDTO
+	lowStockAlerts := make([]dto.LowStockDTO, 0)
 	for _, l := range rawLow {
 		lowStockAlerts = append(lowStockAlerts, dto.LowStockDTO{
 			ProductID:         l.ProductID,
