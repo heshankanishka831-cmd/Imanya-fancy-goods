@@ -103,7 +103,17 @@ export const UserListPage: React.FC = () => {
                     <td className="py-3.5 font-mono text-gray-500">{u.username}</td>
                     <td className="py-3.5 text-gray-600">{u.email}</td>
                     <td className="py-3.5">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                          u.role_name === 'Super Administrator'
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : u.role_name === 'Inventory Manager'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : u.role_name === 'Order Manager'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}
+                      >
                         {u.role_name}
                       </span>
                     </td>

@@ -93,32 +93,20 @@ export const Navbar: React.FC = () => {
             )
           ) : (
             <div className="flex items-center gap-2">
-              {/* Customer Sign In */}
               <Link
-                to="/login?tab=customer"
+                to="/login"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors border border-gray-200"
               >
                 <LogIn className="h-4 w-4 text-blue-600" />
-                <span>Customer Sign In</span>
+                <span>Sign In</span>
               </Link>
 
-              {/* Customer Register (Always Visible) */}
               <Link
                 to="/register"
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs transition-colors"
               >
                 <UserPlus className="h-4 w-4" />
                 <span>Register</span>
-              </Link>
-
-              {/* Staff / Admin Portal Link */}
-              <Link
-                to="/login?tab=admin"
-                className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                title="Staff & Super Admin Login"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 text-gray-400" />
-                <span>Staff</span>
               </Link>
             </div>
           )}

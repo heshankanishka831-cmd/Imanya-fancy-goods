@@ -90,18 +90,11 @@ export const StorefrontPage: React.FC = () => {
                 <span>Register Wholesale Account</span>
               </Link>
               <Link
-                to="/login?tab=customer"
+                to="/login"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white font-semibold text-sm border border-blue-400/40 backdrop-blur-sm transition-all"
               >
                 <LogIn className="h-4 w-4" />
-                <span>Customer Sign In</span>
-              </Link>
-              <Link
-                to="/login?tab=admin"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-black/20 hover:bg-black/30 text-blue-200 text-xs font-medium border border-white/10 transition-all"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 text-blue-300" />
-                <span>Staff Portal</span>
+                <span>Sign In to Account</span>
               </Link>
             </div>
           ) : user?.role_name === 'Customer' ? (
