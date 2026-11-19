@@ -115,7 +115,7 @@ func Bootstrap() (*Application, error) {
 	// Services
 	aService := auditService.NewAuditService(aRepo)
 	uService := userService.NewUserService(uRepo, aService)
-	authSvc := authService.NewAuthService(uRepo, aService, cfg.JWTSecret, cfg.JWTExpirationHours)
+	authSvc := authService.NewAuthService(uRepo, custRepo, aService, cfg.JWTSecret, cfg.JWTExpirationHours, db.DB)
 	iService := invService.NewInventoryService(iRepo, aService, db.DB)
 	catService := catalogService.NewCategoryService(catRepo, aService)
 	prodService := catalogService.NewProductService(prodRepo, catRepo, iService, aService, diskStorage, db.DB)

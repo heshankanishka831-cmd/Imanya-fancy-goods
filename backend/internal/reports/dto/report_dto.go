@@ -30,3 +30,30 @@ type LowStockDTO struct {
 	AvailableStock    int    `json:"available_stock"`
 	LowStockThreshold int    `json:"low_stock_threshold"`
 }
+
+type SalesReportResponse struct {
+	Period          string                `json:"period"` // "weekly", "monthly", "all"
+	StartDate       string                `json:"start_date"`
+	EndDate         string                `json:"end_date"`
+	TotalRevenue    float64               `json:"total_revenue"`
+	TotalOrders     int64                 `json:"total_orders"`
+	CompletedOrders int64                 `json:"completed_orders"`
+	PendingOrders   int64                 `json:"pending_orders"`
+	AverageOrder    float64               `json:"average_order"`
+	TotalUnitsSold  int64                 `json:"total_units_sold"`
+	TopProducts     []TopProductReportDTO `json:"top_products"`
+	DailySales      []DailySalesDTO       `json:"daily_sales"`
+}
+
+type TopProductReportDTO struct {
+	ProductName string  `json:"product_name"`
+	SKU         string  `json:"sku"`
+	Quantity    int64   `json:"quantity"`
+	TotalSales  float64 `json:"total_sales"`
+}
+
+type DailySalesDTO struct {
+	Date    string  `json:"date"`
+	Orders  int64   `json:"orders"`
+	Revenue float64 `json:"revenue"`
+}

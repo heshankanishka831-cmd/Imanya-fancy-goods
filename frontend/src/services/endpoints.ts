@@ -15,11 +15,25 @@ import {
   Customer,
   DashboardMetrics,
   AuditLog,
+  SalesReport,
 } from '../types';
 
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', { email, password });
+    const res = await api.post<ApiResponse<{ token: string; user: User; business_name?: string; phone?: string; address?: string }>>('/auth/login', { email, password });
+    return res.data;
+  },
+  register: async (payload: {
+    first_name: string;
+    last_name: string;
+    username: string;
+    email: string;
+    password: string;
+    phone: string;
+    business_name?: string;
+    address?: string;
+  }) => {
+    const res = await api.post<ApiResponse<{ token: string; user: User; business_name?: string; phone?: string; address?: string }>>('/auth/customer/register', payload);
     return res.data;
   },
 };
@@ -228,6 +242,12 @@ export const adminApi = {
   // Audit Logs
   getAuditLogs: async (params?: { entity?: string; page?: number; limit?: number }) => {
     const res = await api.get<ApiResponse<AuditLog[]>>('/audit-logs', { params });
+    return res.data;
+  },
+
+  // Sales Reporting & PDF Analytics
+  getSalesReport: async (period: 'weekly' | 'monthly' | 'all' = 'weekly') => {
+    const res = await api.get<ApiResponse<SalesReport>>('/reports/sales', { params: { period } });
     return res.data;
   },
 };

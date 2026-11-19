@@ -1,14 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Package, ShieldCheck, User } from 'lucide-react';
+import { ShoppingCart, Package, ShieldCheck, User, LogOut, Store } from 'lucide-react';
 import { useCart } from '../../features/cart/CartContext';
 import { useAuth } from '../../features/auth/AuthContext';
 
 export const Navbar: React.FC = () => {
   const { cart, setIsCartOpen } = useCart();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, customerProfile, logout } = useAuth();
 
   const totalQuantity = cart?.items?.reduce((sum, it) => sum + it.quantity, 0) || 0;
+  const isCustomer = user?.role_name === 'Customer';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
@@ -27,8 +28,8 @@ export const Navbar: React.FC = () => {
         </Link>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
-          {/* Cart Trigger */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Cart Trigger (Customer Portal Only) */}
           <button
             onClick={() => setIsCartOpen(true)}
             className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-gray-700 hover:bg-gray-100 transition-colors"
@@ -42,26 +43,52 @@ export const Navbar: React.FC = () => {
             )}
           </button>
 
-          {/* Admin / Login */}
+          {/* User Status / Navigation */}
           {isAuthenticated ? (
-            <Link
-              to="/admin/dashboard"
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
-            >
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
-              <span className="hidden md:inline">{user?.first_name}</span>
-              <span className="text-xs bg-white text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
-                Dashboard
-              </span>
-            </Link>
+            isCustomer ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-100 text-xs">
+                  <Store className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="font-semibold text-blue-900 hidden sm:inline">
+                    {customerProfile?.business_name || user?.first_name}
+                  </span>
+                </div>
+                <button
+                  onClick={logout}
+                  title="Sign Out"
+                  className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/admin/dashboard"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                <span className="hidden md:inline">{user?.first_name}</span>
+                <span className="text-xs bg-white text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
+                  Dashboard
+                </span>
+              </Link>
+            )
           ) : (
-            <Link
-              to="/login"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-            >
-              <User className="h-4 w-4" />
-              <span>Staff Login</span>
-            </Link>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <User className="h-4 w-4" />
+                <span>Sign In</span>
+              </Link>
+              <Link
+                to="/register"
+                className="hidden sm:inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs transition-colors"
+              >
+                Register
+              </Link>
+            </div>
           )}
         </div>
       </div>

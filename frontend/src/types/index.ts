@@ -229,6 +229,29 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface SalesReport {
+  period: string;
+  start_date: string;
+  end_date: string;
+  total_revenue: number;
+  total_orders: number;
+  completed_orders: number;
+  pending_orders: number;
+  average_order: number;
+  total_units_sold: number;
+  top_products: {
+    product_name: string;
+    sku: string;
+    quantity: number;
+    total_sales: number;
+  }[];
+  daily_sales: {
+    date: string;
+    orders: number;
+    revenue: number;
+  }[];
+}
+
 export interface PaginationMeta {
   current_page: number;
   per_page: number;

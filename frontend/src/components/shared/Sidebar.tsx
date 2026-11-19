@@ -12,6 +12,7 @@ import {
   Shield,
   History,
   Store,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthContext';
 
@@ -26,6 +27,7 @@ export const Sidebar: React.FC = () => {
     { to: '/admin/suppliers', label: 'Suppliers', icon: Truck, roles: ['Super Administrator', 'Inventory Manager'] },
     { to: '/admin/procurement', label: 'Procurement (POs)', icon: FileSpreadsheet, roles: ['Super Administrator', 'Inventory Manager'] },
     { to: '/admin/orders', label: 'Customer Orders', icon: ShoppingCart, roles: ['Super Administrator', 'Order Manager'] },
+    { to: '/admin/reports', label: 'Reports & PDF', icon: FileText, roles: ['Super Administrator', 'Inventory Manager', 'Order Manager'] },
     { to: '/admin/customers', label: 'Customers', icon: Users, roles: ['Super Administrator', 'Order Manager'] },
     { to: '/admin/users', label: 'Staff Users', icon: Shield, roles: ['Super Administrator'] },
     { to: '/admin/audit', label: 'Audit Logs', icon: History, roles: ['Super Administrator'] },

@@ -33,3 +33,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	response.Success(c, http.StatusOK, authResp)
 }
+
+func (h *AuthHandler) RegisterCustomer(c *gin.Context) {
+	var req dto.RegisterCustomerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid registration details format", err.Error())
+		return
+	}
+
+	authResp, err := h.authService.RegisterCustomer(c.Request.Context(), &req, c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		response.BadRequest(c, err.Error(), nil)
+		return
+	}
+
+	response.Success(c, http.StatusCreated, authResp)
+}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"wholesale-management/internal/reports/dto"
 
 	"gorm.io/gorm"
@@ -9,6 +10,7 @@ import (
 
 type ReportService interface {
 	GetDashboardMetrics(ctx context.Context) (*dto.DashboardMetricsResponse, error)
+	GetSalesReport(ctx context.Context, period string) (*dto.SalesReportResponse, error)
 }
 
 type reportService struct {
@@ -126,5 +128,126 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 		OrdersByStatus:   statusCounts,
 		RecentOrders:     recentOrders,
 		LowStockAlerts:   lowStockAlerts,
+	}, nil
+}
+
+func (s *reportService) GetSalesReport(ctx context.Context, period string) (*dto.SalesReportResponse, error) {
+	now := time.Now()
+	var startDate time.Time
+	endDate := now
+
+	dateFilter := "1=1"
+	switch period {
+	case "weekly":
+		startDate = now.AddDate(0, 0, -7)
+		dateFilter = "created_at >= NOW() - INTERVAL '7 days'"
+	case "monthly":
+		startDate = now.AddDate(0, -1, 0)
+		dateFilter = "created_at >= NOW() - INTERVAL '30 days'"
+	default:
+		period = "all"
+		startDate = now.AddDate(-1, 0, 0)
+	}
+
+	// Revenue & Order counts
+	var totalRevenue float64
+	_ = s.db.WithContext(ctx).Table("orders").
+		Where(dateFilter).
+		Where("status != 'CANCELLED'").
+		Select("COALESCE(SUM(total_amount), 0)").
+		Row().Scan(&totalRevenue)
+
+	var totalOrders int64
+	_ = s.db.WithContext(ctx).Table("orders").Where(dateFilter).Count(&totalOrders).Error
+
+	var completedOrders int64
+	_ = s.db.WithContext(ctx).Table("orders").Where(dateFilter).Where("status = 'COMPLETED'").Count(&completedOrders).Error
+
+	var pendingOrders int64
+	_ = s.db.WithContext(ctx).Table("orders").Where(dateFilter).Where("status = 'PENDING'").Count(&pendingOrders).Error
+
+	var avgOrder float64
+	if totalOrders > 0 {
+		avgOrder = totalRevenue / float64(totalOrders)
+	}
+
+	// Total wholesale units sold
+	var totalUnits int64
+	_ = s.db.WithContext(ctx).Table("order_items").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where("orders." + dateFilter).
+		Where("orders.status != 'CANCELLED'").
+		Select("COALESCE(SUM(order_items.quantity), 0)").
+		Row().Scan(&totalUnits)
+
+	// Top selling products
+	type topRaw struct {
+		ProductName string
+		SKU         string
+		Quantity    int64
+		TotalSales  float64
+	}
+	var rawTops []topRaw
+	_ = s.db.WithContext(ctx).Table("order_items").
+		Select("order_items.product_name, products.sku, SUM(order_items.quantity) as quantity, SUM(order_items.subtotal) as total_sales").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins("LEFT JOIN products ON products.id = order_items.product_id").
+		Where("orders." + dateFilter).
+		Where("orders.status != 'CANCELLED'").
+		Group("order_items.product_name, products.sku").
+		Order("total_sales DESC").
+		Limit(10).
+		Scan(&rawTops).Error
+
+	var topProducts []dto.TopProductReportDTO
+	for _, t := range rawTops {
+		sku := t.SKU
+		if sku == "" {
+			sku = "—"
+		}
+		topProducts = append(topProducts, dto.TopProductReportDTO{
+			ProductName: t.ProductName,
+			SKU:         sku,
+			Quantity:    t.Quantity,
+			TotalSales:  t.TotalSales,
+		})
+	}
+
+	// Daily sales breakdown
+	type dailyRaw struct {
+		Date    string
+		Orders  int64
+		Revenue float64
+	}
+	var rawDailies []dailyRaw
+	_ = s.db.WithContext(ctx).Table("orders").
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue").
+		Where(dateFilter).
+		Where("status != 'CANCELLED'").
+		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
+		Order("date ASC").
+		Scan(&rawDailies).Error
+
+	var dailySales []dto.DailySalesDTO
+	for _, d := range rawDailies {
+		dailySales = append(dailySales, dto.DailySalesDTO{
+			Date:    d.Date,
+			Orders:  d.Orders,
+			Revenue: d.Revenue,
+		})
+	}
+
+	return &dto.SalesReportResponse{
+		Period:          period,
+		StartDate:       startDate.Format("2006-01-02"),
+		EndDate:         endDate.Format("2006-01-02"),
+		TotalRevenue:    totalRevenue,
+		TotalOrders:     totalOrders,
+		CompletedOrders: completedOrders,
+		PendingOrders:   pendingOrders,
+		AverageOrder:    avgOrder,
+		TotalUnitsSold:  totalUnits,
+		TopProducts:     topProducts,
+		DailySales:      dailySales,
 	}, nil
 }

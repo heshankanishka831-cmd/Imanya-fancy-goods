@@ -67,6 +67,8 @@ func SetupRouter(
 
 		// Authentication
 		v1.POST("/auth/login", authHdlr.Login)
+		v1.POST("/auth/register", authHdlr.RegisterCustomer)
+		v1.POST("/auth/customer/register", authHdlr.RegisterCustomer)
 
 		// Public Storefront (No Auth Required)
 		pub := v1.Group("/public")
@@ -150,8 +152,9 @@ func SetupRouter(
 			admin.GET("/customers", custHdlr.List)
 			admin.GET("/customers/:id", custHdlr.GetCustomerByID)
 
-			// Reporting Dashboard
+			// Reporting Dashboard & Sales Reports
 			admin.GET("/reports/dashboard", repHdlr.GetDashboard)
+			admin.GET("/reports/sales", repHdlr.GetSalesReport)
 
 			// Audit Trail
 			admin.GET("/audit-logs", aHdlr.ListLogs)

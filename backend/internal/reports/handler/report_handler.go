@@ -25,3 +25,13 @@ func (h *ReportHandler) GetDashboard(c *gin.Context) {
 	}
 	response.Success(c, http.StatusOK, metrics)
 }
+
+func (h *ReportHandler) GetSalesReport(c *gin.Context) {
+	period := c.DefaultQuery("period", "weekly")
+	report, err := h.reportService.GetSalesReport(c.Request.Context(), period)
+	if err != nil {
+		response.InternalServerError(c, "Failed to generate sales report")
+		return
+	}
+	response.Success(c, http.StatusOK, report)
+}

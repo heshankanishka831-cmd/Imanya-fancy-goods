@@ -22,6 +22,8 @@ import { OrderListPage } from '../features/orders/OrderListPage';
 import { CustomerListPage } from '../features/customers/CustomerListPage';
 import { UserListPage } from '../features/users/UserListPage';
 import { AuditLogPage } from '../features/audit/AuditLogPage';
+import { RegisterPage } from '../features/auth/RegisterPage';
+import { ReportsPage } from '../features/reports/ReportsPage';
 
 export const App: React.FC = () => {
   return (
@@ -37,6 +39,7 @@ export const App: React.FC = () => {
             {/* Authentication Gateway */}
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
             </Route>
 
             {/* Administrative Management Portal */}
@@ -49,6 +52,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/suppliers" element={<SupplierListPage />} />
                 <Route path="/admin/procurement" element={<PurchaseOrderListPage />} />
                 <Route path="/admin/orders" element={<OrderListPage />} />
+                <Route path="/admin/reports" element={<ReportsPage />} />
                 <Route path="/admin/customers" element={<CustomerListPage />} />
 
                 {/* Super Administrator Restricted Views */}

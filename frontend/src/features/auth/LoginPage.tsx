@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { KeyRound, Mail, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -20,8 +20,12 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      navigate('/admin/dashboard');
+      const loggedUser = await login(email, password);
+      if (loggedUser.role_name === 'Customer') {
+        navigate('/');
+      } else {
+        navigate('/admin/dashboard');
+      }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Invalid email or password. Please verify your credentials.');
     } finally {
@@ -31,8 +35,8 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div>
-      <h3 className="text-xl font-bold text-gray-900 mb-1">Staff Sign In</h3>
-      <p className="text-xs text-gray-500 mb-6">Imanya Fancy Goods Management Portal</p>
+      <h3 className="text-xl font-bold text-gray-900 mb-1">Sign In to Your Account</h3>
+      <p className="text-xs text-gray-500 mb-6">Staff Management & Wholesale Customer Portal</p>
 
       {error && (
         <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium">
@@ -49,7 +53,7 @@ export const LoginPage: React.FC = () => {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@wholesale.local"
+            placeholder="admin@wholesale.local or your email"
           />
         </div>
 
@@ -65,14 +69,22 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <Button type="submit" isLoading={isLoading} className="w-full mt-2">
-          Authenticate & Enter
+          Sign In
         </Button>
       </form>
 
-      {/* Demo Credentials Info Box */}
-      <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+      {/* Customer Registration Link */}
+      <div className="mt-5 text-center text-xs text-gray-500">
+        New wholesale customer?{' '}
+        <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+          Register Customer Account
+        </Link>
+      </div>
+
+      {/* Default Admin Seed Notice */}
+      <div className="mt-6 pt-5 border-t border-gray-100 text-center">
         <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-2">
-          Default Super Administrator Seed
+          Default Super Administrator Login
         </span>
         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 text-xs text-slate-600 font-mono text-left">
           <p><span className="text-slate-400">Email:</span> admin@wholesale.local</p>
