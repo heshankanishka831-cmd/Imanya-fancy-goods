@@ -28,7 +28,7 @@ export const Sidebar: React.FC = () => {
     { to: '/admin/reports', label: 'Reports & PDF', icon: FileText, roles: ['Super Administrator', 'Inventory Manager', 'Order Manager'] },
     { to: '/admin/customers', label: 'Customers', icon: Users, roles: ['Super Administrator', 'Order Manager'] },
     { to: '/admin/users', label: 'Staff Users', icon: Shield, roles: ['Super Administrator'] },
-    { to: '/admin/audit', label: 'Audit Logs', icon: History, roles: ['Super Administrator'] },
+    { to: '/admin/audit', label: 'Audit Logs & History', icon: History, roles: ['Super Administrator', 'Inventory Manager', 'Order Manager'] },
   ];
 
   return (

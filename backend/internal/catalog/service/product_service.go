@@ -245,9 +245,23 @@ func (s *productService) UploadImage(ctx context.Context, actorID string, produc
 		return nil, errors.New("file storage service is not configured")
 	}
 
+	// Enforce maximum 5 photos per product
+	var existingCount int64
+	if err := s.db.WithContext(ctx).Model(&model.ProductImage{}).Where("product_id = ?", productID).Count(&existingCount).Error; err != nil {
+		return nil, err
+	}
+	if existingCount >= 5 {
+		return nil, errors.New("maximum 5 photos allowed per product")
+	}
+
 	imageURL, err := s.storage.SaveImage(file)
 	if err != nil {
 		return nil, err
+	}
+
+	// If this is the first image, make it primary automatically
+	if existingCount == 0 {
+		isPrimary = true
 	}
 
 	image := &model.ProductImage{
@@ -255,6 +269,7 @@ func (s *productService) UploadImage(ctx context.Context, actorID string, produc
 		ImageURL:  imageURL,
 		AltText:   file.Filename,
 		IsPrimary: isPrimary,
+		SortOrder: int(existingCount),
 	}
 
 	if err := s.repo.AddImage(ctx, image); err != nil {
@@ -272,6 +287,18 @@ func (s *productService) UploadImage(ctx context.Context, actorID string, produc
 }
 
 func (s *productService) DeleteImage(ctx context.Context, actorID string, productID, imageID string, ip, ua string) error {
+	// If the deleted image was primary, designate another image as primary
+	var img model.ProductImage
+	if err := s.db.WithContext(ctx).Where("id = ? AND product_id = ?", imageID, productID).First(&img).Error; err == nil {
+		if img.IsPrimary {
+			_ = s.db.WithContext(ctx).Model(&model.ProductImage{}).
+				Where("product_id = ? AND id != ?", productID, imageID).
+				Order("sort_order ASC, created_at ASC").
+				Limit(1).
+				Update("is_primary", true).Error
+		}
+	}
+
 	if err := s.repo.DeleteImage(ctx, imageID); err != nil {
 		return err
 	}

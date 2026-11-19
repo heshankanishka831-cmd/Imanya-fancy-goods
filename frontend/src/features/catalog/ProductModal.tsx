@@ -3,8 +3,8 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { adminApi } from '../../services/endpoints';
-import { ProductAdmin, Category } from '../../types';
-import { AlertCircle, Tag, Sparkles } from 'lucide-react';
+import { ProductAdmin, Category, ProductImage } from '../../types';
+import { AlertCircle, Tag, Sparkles, ImagePlus, X, Star, Check } from 'lucide-react';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -13,6 +13,11 @@ interface ProductModalProps {
   productToEdit?: ProductAdmin | null;
   categories: Category[];
   onCategoriesChange?: () => void;
+}
+
+interface NewImageItem {
+  file: File;
+  previewUrl: string;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -37,7 +42,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     is_active: true,
   });
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  // Multiple photos state (Max 5 photos)
+  const [existingImages, setExistingImages] = useState<ProductImage[]>([]);
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<NewImageItem[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +70,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         low_stock_threshold: Math.round(productToEdit.low_stock_threshold || 5),
         is_active: productToEdit.is_active,
       });
+      setExistingImages(productToEdit.images || []);
     } else {
       setCategoryName(localCategories[0]?.name || '');
       setFormData({
@@ -73,15 +84,66 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         low_stock_threshold: 5,
         is_active: true,
       });
+      setExistingImages([]);
     }
-    setImageFile(null);
+    // Clean up previous blob URLs if any
+    newImages.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setNewImages([]);
+    setImagesToDelete([]);
+    setImageError(null);
     setError(null);
   }, [productToEdit, isOpen, localCategories]);
+
+  // Active photos calculation (Max 5)
+  const activeExistingImages = existingImages.filter((img) => !imagesToDelete.includes(img.id));
+  const totalPhotosCount = activeExistingImages.length + newImages.length;
+  const remainingPhotoSlots = Math.max(0, 5 - totalPhotosCount);
+
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setImageError(null);
+
+    if (totalPhotosCount >= 5) {
+      setImageError('Maximum limit of 5 photos reached for this product.');
+      return;
+    }
+
+    if (files.length > remainingPhotoSlots) {
+      setImageError(`You can only add ${remainingPhotoSlots} more photo(s). Maximum allowed is 5 photos per product.`);
+    }
+
+    const filesToAdd = files.slice(0, remainingPhotoSlots);
+    const newItems: NewImageItem[] = filesToAdd.map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    setNewImages((prev) => [...prev, ...newItems]);
+    // Reset file input value so same files can be re-selected if deleted
+    e.target.value = '';
+  };
+
+  const handleRemoveNewImage = (index: number) => {
+    const itemToRemove = newImages[index];
+    if (itemToRemove) {
+      URL.revokeObjectURL(itemToRemove.previewUrl);
+    }
+    setNewImages((prev) => prev.filter((_, i) => i !== index));
+    setImageError(null);
+  };
+
+  const handleMarkDeleteExistingImage = (imageId: string) => {
+    setImagesToDelete((prev) => [...prev, imageId]);
+    setImageError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setImageError(null);
 
     const trimmedCat = categoryName.trim();
     if (!trimmedCat) {
@@ -145,9 +207,24 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         productId = res.data.id;
       }
 
-      // 3. Upload Image if provided
-      if (imageFile && productId) {
-        await adminApi.uploadProductImage(productId, imageFile, true);
+      // 3. Process image deletions (if editing)
+      if (productId && imagesToDelete.length > 0) {
+        for (const imageId of imagesToDelete) {
+          try {
+            await adminApi.deleteProductImage(productId, imageId);
+          } catch (delErr) {
+            console.error('Failed to delete image', imageId, delErr);
+          }
+        }
+      }
+
+      // 4. Upload all newly added photos (Up to 5 total)
+      if (productId && newImages.length > 0) {
+        let hasPrimary = activeExistingImages.length > 0;
+        for (let i = 0; i < newImages.length; i++) {
+          const isPrimary = !hasPrimary && i === 0;
+          await adminApi.uploadProductImage(productId, newImages[i].file, isPrimary);
+        }
       }
 
       onSuccess();
@@ -332,17 +409,105 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           />
         </div>
 
-        {/* Product Image Attachment */}
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1">
-            Product Image (JPEG, PNG, WEBP - Max 5MB)
-          </label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-            className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          />
+        {/* Multi-Photo Upload Section (Max 5 Photos) */}
+        <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                <ImagePlus className="h-4 w-4 text-blue-600" />
+                <span>Product Photos ({totalPhotosCount}/5)</span>
+              </span>
+              <p className="text-[11px] text-gray-500">
+                Add up to 5 photos for this item. First photo serves as primary catalog thumbnail.
+              </p>
+            </div>
+            <span
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                totalPhotosCount >= 5
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-blue-100 text-blue-700'
+              }`}
+            >
+              {remainingPhotoSlots === 0 ? 'Max 5 reached' : `${remainingPhotoSlots} slot(s) left`}
+            </span>
+          </div>
+
+          {imageError && (
+            <p className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span>{imageError}</span>
+            </p>
+          )}
+
+          {/* Photo Thumbnails Preview Grid */}
+          <div className="flex flex-wrap gap-2.5 items-center">
+            {/* Existing Active Images */}
+            {activeExistingImages.map((img, idx) => (
+              <div
+                key={img.id}
+                className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 bg-white group shadow-2xs"
+              >
+                <img
+                  src={img.image_url}
+                  alt={img.alt_text || 'Product'}
+                  className="w-full h-full object-cover"
+                />
+                {idx === 0 && (
+                  <span className="absolute bottom-1 left-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
+                    <Star className="h-2 w-2 fill-white" /> Main
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleMarkDeleteExistingImage(img.id)}
+                  title="Remove this photo"
+                  className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-rose-700"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+
+            {/* New Pending Upload Images */}
+            {newImages.map((item, idx) => (
+              <div
+                key={item.previewUrl}
+                className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-blue-400 bg-white group shadow-2xs"
+              >
+                <img
+                  src={item.previewUrl}
+                  alt="New upload"
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute bottom-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
+                  <Check className="h-2 w-2" /> New
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveNewImage(idx)}
+                  title="Remove this photo"
+                  className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-rose-700"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+
+            {/* Upload Tile Button (Enabled if < 5 photos) */}
+            {totalPhotosCount < 5 && (
+              <label className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-500 bg-white hover:bg-blue-50/50 flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-blue-600 transition-all shadow-2xs">
+                <ImagePlus className="h-5 w-5 mb-0.5" />
+                <span className="text-[10px] font-bold">+ Add Photo</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFilesSelected}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

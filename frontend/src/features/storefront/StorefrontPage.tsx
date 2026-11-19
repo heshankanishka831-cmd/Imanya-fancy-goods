@@ -5,8 +5,9 @@ import { Product, Category } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useCart } from '../cart/CartContext';
 import { useAuth } from '../auth/AuthContext';
-import { Search, ShoppingCart, Check, Package, Sparkles, UserPlus, LogIn, ShieldCheck, Store } from 'lucide-react';
+import { Search, ShoppingCart, Check, Package, Sparkles, UserPlus, LogIn, ShieldCheck, Store, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Spinner } from '../../components/ui/Spinner';
+import { Modal } from '../../components/ui/Modal';
 
 export const StorefrontPage: React.FC = () => {
   const { addToCart } = useCart();
@@ -17,6 +18,9 @@ export const StorefrontPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [activePhotoMap, setActivePhotoMap] = useState<Record<string, number>>({});
+  const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
+  const [lightboxIdx, setLightboxIdx] = useState<number>(0);
 
   useEffect(() => {
     loadCategories();
@@ -203,24 +207,39 @@ export const StorefrontPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {products.map((p) => {
-            const primaryImg = p.images?.length > 0 ? p.images[0].image_url : null;
+            const imageCount = p.images?.length || 0;
+            const currentIdx = activePhotoMap[p.id] || 0;
+            const currentImage = imageCount > 0 ? p.images[currentIdx]?.image_url : null;
 
             return (
               <div
                 key={p.id}
                 className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all flex flex-col overflow-hidden group"
               >
-                {/* Image Box */}
+                {/* Image Box with Multi-Photo Switcher */}
                 <div className="relative aspect-4/3 bg-gray-50 border-b border-gray-100 flex items-center justify-center overflow-hidden">
-                  {primaryImg ? (
+                  {currentImage ? (
                     <img
-                      src={primaryImg}
+                      src={currentImage}
                       alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onClick={() => {
+                        setLightboxProduct(p);
+                        setLightboxIdx(currentIdx);
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-pointer"
                     />
                   ) : (
                     <Package className="h-12 w-12 text-gray-300" />
                   )}
+
+                  {/* Photo Count Badge (if > 1 photo) */}
+                  {imageCount > 1 && (
+                    <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>📷</span>
+                      <span>{currentIdx + 1}/{imageCount}</span>
+                    </div>
+                  )}
+
                   {/* Stock Badge */}
                   <div className="absolute top-3 right-3">
                     {p.in_stock ? (
@@ -233,6 +252,28 @@ export const StorefrontPage: React.FC = () => {
                       </span>
                     )}
                   </div>
+
+                  {/* Multi-Photo Dots Selector (Max 5) */}
+                  {imageCount > 1 && (
+                    <div className="absolute bottom-2 left-0 right-0 flex justify-center items-center gap-1.5 z-10">
+                      {p.images.map((img, i) => (
+                        <button
+                          key={img.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePhotoMap((prev) => ({ ...prev, [p.id]: i }));
+                          }}
+                          className={`h-2 rounded-full transition-all ${
+                            currentIdx === i
+                              ? 'w-5 bg-blue-600 shadow-xs'
+                              : 'w-2 bg-white/80 hover:bg-white shadow-2xs'
+                          }`}
+                          title={`Photo ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Content Box */}
@@ -276,6 +317,86 @@ export const StorefrontPage: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {/* Customer High-Res Photo Lightbox Modal */}
+      {lightboxProduct && lightboxProduct.images?.length > 0 && (
+        <Modal
+          isOpen={!!lightboxProduct}
+          onClose={() => setLightboxProduct(null)}
+          title={`${lightboxProduct.name} (Photo ${lightboxIdx + 1} of ${lightboxProduct.images.length})`}
+          maxWidth="2xl"
+        >
+          <div className="space-y-4">
+            <div className="relative aspect-4/3 rounded-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
+              <img
+                src={lightboxProduct.images[lightboxIdx]?.image_url}
+                alt={lightboxProduct.name}
+                className="w-full h-full object-contain"
+              />
+
+              {lightboxProduct.images.length > 1 && (
+                <>
+                  <button
+                    onClick={() =>
+                      setLightboxIdx((prev) =>
+                        prev === 0 ? lightboxProduct.images.length - 1 : prev - 1
+                      )
+                    }
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      setLightboxIdx((prev) =>
+                        prev === lightboxProduct.images.length - 1 ? 0 : prev + 1
+                      )
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Thumbnail carousel row */}
+            {lightboxProduct.images.length > 1 && (
+              <div className="flex gap-2 justify-center pb-2">
+                {lightboxProduct.images.map((img, idx) => (
+                  <button
+                    key={img.id}
+                    onClick={() => setLightboxIdx(idx)}
+                    className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${
+                      lightboxIdx === idx
+                        ? 'border-blue-600 ring-2 ring-blue-200 scale-105'
+                        : 'border-gray-200 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={img.image_url} alt="Thumbnail" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 font-mono">SKU: {lightboxProduct.sku}</p>
+                <p className="text-sm font-bold text-gray-900">
+                  {formatCurrency(lightboxProduct.selling_price)} / {lightboxProduct.unit_of_measure}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxProduct(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

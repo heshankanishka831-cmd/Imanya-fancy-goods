@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 
 	"wholesale-management/internal/platform/response"
 
@@ -67,6 +68,14 @@ func (cs *CasbinService) EnforceMiddleware() gin.HandlerFunc {
 
 		path := c.Request.URL.Path
 		method := c.Request.Method
+
+		// Allow any authorized administrative staff role to view audit trails / history
+		if (path == "/api/v1/audit-logs" || strings.HasPrefix(path, "/api/v1/audit-logs")) && method == "GET" {
+			if roleName == "Super Administrator" || roleName == "Inventory Manager" || roleName == "Order Manager" || strings.Contains(strings.ToLower(roleName), "admin") || strings.Contains(strings.ToLower(roleName), "manager") {
+				c.Next()
+				return
+			}
+		}
 
 		allowed, err := cs.Enforcer.Enforce(roleName, path, method)
 		if err != nil || !allowed {

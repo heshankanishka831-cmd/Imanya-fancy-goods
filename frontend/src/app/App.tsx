@@ -54,11 +54,11 @@ export const App: React.FC = () => {
                 <Route path="/admin/orders" element={<OrderListPage />} />
                 <Route path="/admin/reports" element={<ReportsPage />} />
                 <Route path="/admin/customers" element={<CustomerListPage />} />
+                <Route path="/admin/audit" element={<AuditLogPage />} />
 
-                {/* Super Administrator Restricted Views */}
+                {/* Super Administrator Staff Management */}
                 <Route element={<ProtectedRoute allowedRoles={['Super Administrator']} />}>
                   <Route path="/admin/users" element={<UserListPage />} />
-                  <Route path="/admin/audit" element={<AuditLogPage />} />
                 </Route>
               </Route>
             </Route>
