@@ -1,38 +1,34 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { publicApi } from '../../services/endpoints';
 import { Product, Category } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
 import { useCart } from '../cart/CartContext';
 import { useAuth } from '../auth/AuthContext';
+import { subscribeCatalogUpdated } from '../../utils/catalogSync';
 import {
   Search,
   ShoppingCart,
-  Check,
   Package,
   Sparkles,
   UserPlus,
   LogIn,
   ShieldCheck,
   Store,
-  ChevronLeft,
   ChevronRight,
-  Eye,
   Truck,
   CreditCard,
   MessageSquare,
   ArrowUpDown,
   Tag,
   X,
-  Plus,
-  Minus,
   CheckCircle2,
   PhoneCall,
   Clock,
   Layers,
 } from 'lucide-react';
 import { Spinner } from '../../components/ui/Spinner';
-import { Modal } from '../../components/ui/Modal';
+import { ProductCard, ProductGrid } from '../customer/components/ProductCard';
+import { ProductQuickViewModal } from '../customer/components/ProductQuickViewModal';
 
 export const StorefrontPage: React.FC = () => {
   const { addToCart } = useCart();
@@ -46,26 +42,48 @@ export const StorefrontPage: React.FC = () => {
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Per-card quantities for bulk wholesale ordering
-  const [cardQuantities, setCardQuantities] = useState<Record<string, number>>({});
-  const [addingMap, setAddingMap] = useState<Record<string, boolean>>({});
-  const [addedMap, setAddedMap] = useState<Record<string, boolean>>({});
-
-  // Active photo switcher index for cards
-  const [activePhotoMap, setActivePhotoMap] = useState<Record<string, number>>({});
-
-  // Quick View & Lightbox Modal state
+  // Quick View Modal state
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
-  const [quickViewPhotoIdx, setQuickViewPhotoIdx] = useState<number>(0);
-  const [quickViewQty, setQuickViewQty] = useState<number>(1);
 
   useEffect(() => {
     loadCategories();
   }, []);
 
+  const loadProducts = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await publicApi.getProducts({
+        category_id: selectedCategory || undefined,
+        search: search.trim() || undefined,
+        limit: 200,
+      });
+      if (res.success && res.data) {
+        setProducts(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load products', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCategory, search]);
+
   useEffect(() => {
     loadProducts();
-  }, [selectedCategory, search]);
+  }, [loadProducts]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeCatalogUpdated(() => {
+      loadProducts();
+    });
+    const handleFocus = () => {
+      loadProducts();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadProducts]);
 
   const loadCategories = async () => {
     try {
@@ -78,47 +96,8 @@ export const StorefrontPage: React.FC = () => {
     }
   };
 
-  const loadProducts = async () => {
-    try {
-      setIsLoading(true);
-      const res = await publicApi.getProducts({
-        category_id: selectedCategory || undefined,
-        search: search.trim() || undefined,
-      });
-      if (res.success && res.data) {
-        setProducts(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load products', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Helper for quantity management per product
-  const getQuantity = (productId: string) => cardQuantities[productId] || 1;
-
-  const setQuantity = (productId: string, val: number, maxAvailable?: number) => {
-    let nextVal = Math.max(1, Math.round(val));
-    if (maxAvailable !== undefined && maxAvailable > 0 && nextVal > maxAvailable) {
-      nextVal = maxAvailable;
-    }
-    setCardQuantities((prev) => ({ ...prev, [productId]: nextVal }));
-  };
-
   const handleAddToCart = async (product: Product, qty: number) => {
-    try {
-      setAddingMap((prev) => ({ ...prev, [product.id]: true }));
-      await addToCart(product.id, qty);
-      setAddedMap((prev) => ({ ...prev, [product.id]: true }));
-      setTimeout(() => {
-        setAddedMap((prev) => ({ ...prev, [product.id]: false }));
-      }, 2000);
-    } catch (err) {
-      console.error('Error adding to cart', err);
-    } finally {
-      setAddingMap((prev) => ({ ...prev, [product.id]: false }));
-    }
+    await addToCart(product.id, qty);
   };
 
   // Category counts based on loaded catalog
@@ -139,12 +118,18 @@ export const StorefrontPage: React.FC = () => {
     }
 
     switch (sortBy) {
-      case 'price-asc':
-        list.sort((a, b) => a.selling_price - b.selling_price);
+      case 'price-asc': {
+        const eff = (p: Product) =>
+          p.is_discount_active && p.discounted_price ? p.discounted_price : p.selling_price;
+        list.sort((a, b) => eff(a) - eff(b));
         break;
-      case 'price-desc':
-        list.sort((a, b) => b.selling_price - a.selling_price);
+      }
+      case 'price-desc': {
+        const eff = (p: Product) =>
+          p.is_discount_active && p.discounted_price ? p.discounted_price : p.selling_price;
+        list.sort((a, b) => eff(b) - eff(a));
         break;
+      }
       case 'name-asc':
         list.sort((a, b) => a.name.localeCompare(b.name));
         break;
@@ -161,8 +146,6 @@ export const StorefrontPage: React.FC = () => {
 
   const openQuickView = (p: Product) => {
     setQuickViewProduct(p);
-    setQuickViewPhotoIdx(0);
-    setQuickViewQty(cardQuantities[p.id] || 1);
   };
 
   return (
@@ -174,7 +157,7 @@ export const StorefrontPage: React.FC = () => {
         <div className="relative z-10 max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/15 backdrop-blur-md text-xs font-bold text-blue-300 border border-blue-400/20 mb-4">
             <Sparkles className="h-3.5 w-3.5 text-blue-300" />
-            <span>Direct Imports & Wholesale Portal</span>
+            <span>Direct Imports & Customer Portal</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-4">
@@ -182,7 +165,7 @@ export const StorefrontPage: React.FC = () => {
           </h1>
 
           <p className="text-sm sm:text-base text-blue-100/90 font-normal leading-relaxed mb-6">
-            Direct importers and wholesale distributors of fashion accessories, hair accessories, cosmetic novelties, jewelry, and commercial fancy goods. Verified wholesale rates in whole Sri Lankan Rupees (<strong className="text-white">Rs.</strong>) with instant WhatsApp bank slip confirmation.
+            Direct importers and sales distributors of fashion accessories, hair accessories, cosmetic novelties, jewelry, and commercial fancy goods. Verified unit prices in whole Sri Lankan Rupees (<strong className="text-white">Rs.</strong>) with instant WhatsApp bank slip confirmation.
           </p>
 
           {/* User Account / Navigation Bar */}
@@ -193,7 +176,7 @@ export const StorefrontPage: React.FC = () => {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-md transition-all hover:scale-[1.02]"
               >
                 <UserPlus className="h-4 w-4" />
-                <span>Register Wholesale Buyer Account</span>
+                <span>Register Customer Account</span>
               </Link>
               <Link
                 to="/login"
@@ -214,7 +197,7 @@ export const StorefrontPage: React.FC = () => {
                     Welcome back, {customerProfile?.business_name || user?.first_name}!
                   </p>
                   <p className="text-blue-200 text-xs">
-                    Wholesale trade pricing enabled. Manage bulk orders, invoices, and bank slips.
+                    Customer portal enabled. Manage orders, invoices, and bank slips.
                   </p>
                 </div>
               </div>
@@ -223,7 +206,7 @@ export const StorefrontPage: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xs transition-all hover:scale-105 shrink-0"
               >
                 <Store className="h-3.5 w-3.5" />
-                <span>My Wholesale Portal & Orders &rarr;</span>
+                <span>My Customer Portal & Orders &rarr;</span>
               </Link>
             </div>
           ) : (
@@ -269,7 +252,7 @@ export const StorefrontPage: React.FC = () => {
             </div>
             <div>
               <p className="text-xs font-bold text-white">Factory Direct</p>
-              <p className="text-[10px] text-blue-200">Wholesale import rates</p>
+              <p className="text-[10px] text-blue-200">Sales import rates</p>
             </div>
           </div>
 
@@ -303,7 +286,7 @@ export const StorefrontPage: React.FC = () => {
               4
             </div>
             <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-              Wholesale Sourcing & Verification Workflow
+              Ordering & Verification Workflow
             </h3>
           </div>
 
@@ -427,7 +410,7 @@ export const StorefrontPage: React.FC = () => {
         {/* Results Count & Active Filters Indicator */}
         <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
           <span>
-            Showing <strong className="text-gray-900">{processedProducts.length}</strong> wholesale products
+            Showing <strong className="text-gray-900">{processedProducts.length}</strong> products
             {selectedCategory && (
               <> in <span className="text-blue-600 font-semibold">{categories.find((c) => c.id === selectedCategory)?.name}</span></>
             )}
@@ -454,7 +437,7 @@ export const StorefrontPage: React.FC = () => {
       {isLoading ? (
         <div className="py-24 flex flex-col items-center justify-center gap-3">
           <Spinner size="lg" />
-          <p className="text-xs text-gray-500 font-medium">Fetching live wholesale catalog from warehouse database...</p>
+          <p className="text-xs text-gray-500 font-medium">Fetching live catalog from warehouse database...</p>
         </div>
       ) : processedProducts.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-xs">
@@ -462,7 +445,7 @@ export const StorefrontPage: React.FC = () => {
           <h3 className="text-base font-bold text-gray-800">No matching products found</h3>
           <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
             {products.length === 0
-              ? 'All demo data has been cleared. The Super Administrator can add wholesale products from the admin panel.'
+              ? 'All demo data has been cleared. The Super Administrator can add products from the admin panel.'
               : 'Try clearing your search term or selecting a different category filter.'}
           </p>
           {products.length > 0 && (
@@ -479,237 +462,16 @@ export const StorefrontPage: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {processedProducts.map((p) => {
-            const imageCount = p.images?.length || 0;
-            const currentIdx = activePhotoMap[p.id] || 0;
-            const currentImage = imageCount > 0 ? p.images[currentIdx]?.image_url : null;
-            const qty = getQuantity(p.id);
-            const isAdding = addingMap[p.id] || false;
-            const isAdded = addedMap[p.id] || false;
-            const availStock = p.available_stock !== undefined ? p.available_stock : (p.in_stock ? 100 : 0);
-
-            return (
-              <div
-                key={p.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden group hover:border-blue-100"
-              >
-                {/* Image Showcase Box */}
-                <div className="relative aspect-4/3 bg-gray-50 border-b border-gray-100 flex items-center justify-center overflow-hidden">
-                  {currentImage ? (
-                    <img
-                      src={currentImage}
-                      alt={p.name}
-                      onClick={() => openQuickView(p)}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-pointer"
-                    />
-                  ) : (
-                    <div
-                      onClick={() => openQuickView(p)}
-                      className="w-full h-full flex items-center justify-center cursor-pointer"
-                    >
-                      <Package className="h-12 w-12 text-gray-300" />
-                    </div>
-                  )}
-
-                  {/* Top Left: Photo Count Badge (if > 1 photo) */}
-                  {imageCount > 1 && (
-                    <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
-                      <span>📷</span>
-                      <span>{currentIdx + 1}/{imageCount}</span>
-                    </div>
-                  )}
-
-                  {/* Top Right: Stock Status Badge */}
-                  <div className="absolute top-3 right-3">
-                    {availStock > 5 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-                        <Check className="h-2.5 w-2.5" /> In Stock ({availStock})
-                      </span>
-                    ) : availStock > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs">
-                        Low: {availStock} Left
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
-                        Out of Stock
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Hover Quick-View Action Button */}
-                  <button
-                    type="button"
-                    onClick={() => openQuickView(p)}
-                    className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-white text-xs font-bold pointer-events-auto"
-                    title="Quick View & High-Res Inspection"
-                  >
-                    <div className="px-3 py-1.5 rounded-xl bg-slate-900/80 backdrop-blur-md flex items-center gap-1.5 shadow-md hover:bg-slate-900">
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>Quick View</span>
-                    </div>
-                  </button>
-
-                  {/* Bottom Multi-Photo Dots Selector (Max 5) */}
-                  {imageCount > 1 && (
-                    <div className="absolute bottom-2 left-0 right-0 flex justify-center items-center gap-1.5 z-10 pointer-events-auto">
-                      {p.images.map((img, i) => (
-                        <button
-                          key={img.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActivePhotoMap((prev) => ({ ...prev, [p.id]: i }));
-                          }}
-                          className={`h-2 rounded-full transition-all ${
-                            currentIdx === i
-                              ? 'w-5 bg-blue-600 shadow-xs'
-                              : 'w-2 bg-white/80 hover:bg-white shadow-2xs'
-                          }`}
-                          title={`Photo ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Content Box */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    {/* Category & SKU */}
-                    <div className="flex items-center justify-between text-[11px] mb-1">
-                      <span className="font-semibold text-blue-600 uppercase tracking-wider truncate max-w-[140px]">
-                        {p.category_name}
-                      </span>
-                      <span className="font-mono text-gray-400">SKU: {p.sku}</span>
-                    </div>
-
-                    {/* Title */}
-                    <h3
-                      onClick={() => openQuickView(p)}
-                      className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 cursor-pointer leading-snug"
-                      title={p.name}
-                    >
-                      {p.name}
-                    </h3>
-
-                    {/* Description */}
-                    {p.description && (
-                      <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
-                        {p.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* B2B Wholesale Pricing & Bulk Quantity Selector */}
-                  <div className="pt-3 border-t border-gray-100 space-y-3">
-                    <div className="flex items-baseline justify-between">
-                      <div>
-                        <span className="text-[10px] text-gray-400 block uppercase font-semibold">Wholesale Rate</span>
-                        <span className="text-lg font-black text-gray-900">
-                          {formatCurrency(p.selling_price)}
-                        </span>
-                        <span className="text-[11px] text-gray-500 font-medium ml-1">
-                          /{p.unit_of_measure}
-                        </span>
-                      </div>
-
-                      {qty > 1 && (
-                        <div className="text-right">
-                          <span className="text-[10px] text-gray-400 block">Subtotal</span>
-                          <span className="text-xs font-bold text-blue-700">
-                            {formatCurrency(p.selling_price * qty)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Wholesale Quantity Stepper (Puckator Style) */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50/50 p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setQuantity(p.id, qty - 1, availStock)}
-                          disabled={qty <= 1 || !p.in_stock}
-                          className="p-1 rounded-lg text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-                          title="Decrease Quantity"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          max={availStock > 0 ? availStock : 9999}
-                          value={qty}
-                          onChange={(e) => setQuantity(p.id, parseInt(e.target.value) || 1, availStock)}
-                          disabled={!p.in_stock}
-                          className="w-10 text-center text-xs font-bold bg-transparent text-gray-900 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setQuantity(p.id, qty + 1, availStock)}
-                          disabled={qty >= availStock || !p.in_stock}
-                          className="p-1 rounded-lg text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-                          title="Increase Quantity"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-
-                      {/* Quick Pack Presets (e.g. +6, +12) */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setQuantity(p.id, 6, availStock)}
-                          disabled={!p.in_stock || availStock < 6}
-                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30"
-                          title="Pack of 6"
-                        >
-                          6
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQuantity(p.id, 12, availStock)}
-                          disabled={!p.in_stock || availStock < 12}
-                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30"
-                          title="Dozen (12)"
-                        >
-                          12
-                        </button>
-                      </div>
-
-                      {/* Add to Wholesale Cart Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleAddToCart(p, qty)}
-                        disabled={!p.in_stock || isAdding}
-                        className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 ${
-                          isAdded
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white'
-                        }`}
-                      >
-                        {isAdding ? (
-                          <Spinner size="sm" />
-                        ) : isAdded ? (
-                          <>
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Added!</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShoppingCart className="h-3.5 w-3.5" />
-                            <span>Add {qty > 1 ? `(${qty})` : ''}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <ProductGrid>
+          {processedProducts.map((p) => (
+            <ProductCard
+              key={p.id}
+              product={p}
+              onAddToCart={handleAddToCart}
+              onQuickView={openQuickView}
+            />
+          ))}
+        </ProductGrid>
       )}
 
       {/* 5. Enterprise B2B Trust, Support & Direct WhatsApp Inquiries */}
@@ -717,7 +479,7 @@ export const StorefrontPage: React.FC = () => {
         <div className="space-y-2 max-w-xl text-center md:text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-xs font-bold text-blue-300">
             <PhoneCall className="h-3.5 w-3.5 text-blue-300" />
-            <span>Dedicated Wholesale Desk</span>
+            <span>Dedicated Customer Desk</span>
           </div>
           <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight">
             Need Bulk Container Imports or Custom Variety Packs?
@@ -729,13 +491,13 @@ export const StorefrontPage: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
           <a
-            href="https://wa.me/94770000000?text=Hello%20Imanya%20Fancy%20Goods%2C%20I%20am%20a%20wholesale%20buyer%20interested%20in%20bulk%20purchasing."
+            href="https://wa.me/94766611606?text=Hello%20Imanya%20Fancy%20Goods%2C%20I%20am%20interested%20in%20bulk%20purchasing."
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition-all hover:scale-105"
           >
             <MessageSquare className="h-4 w-4" />
-            <span>WhatsApp Wholesale Desk</span>
+            <span>WhatsApp Customer Desk</span>
           </a>
 
           {!isAuthenticated && (
@@ -744,210 +506,27 @@ export const StorefrontPage: React.FC = () => {
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs sm:text-sm border border-white/20 transition-all"
             >
               <UserPlus className="h-4 w-4" />
-              <span>Create Trade Account</span>
+              <span>Create Customer Account</span>
             </Link>
           )}
         </div>
       </div>
 
       {/* 6. High-Definition Quick View & Multi-Photo Lightbox Modal */}
-      {quickViewProduct && (
-        <Modal
-          isOpen={!!quickViewProduct}
-          onClose={() => setQuickViewProduct(null)}
-          title={`Wholesale SKU: ${quickViewProduct.sku} — ${quickViewProduct.name}`}
-          maxWidth="3xl"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-1">
-            {/* Left: Gallery & Zoom Showcase */}
-            <div className="space-y-3">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden bg-slate-900 flex items-center justify-center border border-gray-100">
-                {quickViewProduct.images && quickViewProduct.images.length > 0 ? (
-                  <img
-                    src={quickViewProduct.images[quickViewPhotoIdx]?.image_url}
-                    alt={quickViewProduct.name}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <Package className="h-16 w-16 text-gray-500" />
-                )}
-
-                {/* Left/Right Prev/Next Controls */}
-                {quickViewProduct.images && quickViewProduct.images.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQuickViewPhotoIdx((prev) =>
-                          prev === 0 ? quickViewProduct.images.length - 1 : prev - 1
-                        )
-                      }
-                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-                      title="Previous Photo"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQuickViewPhotoIdx((prev) =>
-                          prev === quickViewProduct.images.length - 1 ? 0 : prev + 1
-                        )
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-                      title="Next Photo"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-
-                {/* Photo indicator */}
-                {quickViewProduct.images && quickViewProduct.images.length > 0 && (
-                  <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                    {quickViewPhotoIdx + 1} / {quickViewProduct.images.length}
-                  </div>
-                )}
-              </div>
-
-              {/* Thumbnails row (Max 5 photos) */}
-              {quickViewProduct.images && quickViewProduct.images.length > 1 && (
-                <div className="flex gap-2 justify-center overflow-x-auto pb-1">
-                  {quickViewProduct.images.map((img, idx) => (
-                    <button
-                      key={img.id}
-                      type="button"
-                      onClick={() => setQuickViewPhotoIdx(idx)}
-                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
-                        quickViewPhotoIdx === idx
-                          ? 'border-blue-600 ring-2 ring-blue-200 scale-105'
-                          : 'border-gray-200 opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={img.image_url} alt="Thumbnail" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Right: Specifications & Wholesale Bulk Purchase */}
-            <div className="flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
-                    {quickViewProduct.category_name}
-                  </span>
-                  <span className="text-xs font-mono text-gray-500">
-                    Item Code: <strong>{quickViewProduct.sku}</strong>
-                  </span>
-                </div>
-
-                <h3 className="text-lg font-extrabold text-gray-900 leading-snug">
-                  {quickViewProduct.name}
-                </h3>
-
-                <div className="flex items-center gap-2">
-                  {(quickViewProduct.available_stock || 0) > 0 ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                      <Check className="h-3 w-3" /> In Stock ({quickViewProduct.available_stock || 0} Available)
-                    </span>
-                  ) : (
-                    <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
-                      Out of Stock
-                    </span>
-                  )}
-                  <span className="text-xs text-gray-400">Unit: {quickViewProduct.unit_of_measure}</span>
-                </div>
-
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <span className="text-[10px] text-gray-400 block uppercase font-semibold">Wholesale Unit Price</span>
-                  <div className="text-2xl font-black text-blue-900">
-                    {formatCurrency(quickViewProduct.selling_price)}
-                    <span className="text-xs font-normal text-gray-500 ml-1">
-                      per {quickViewProduct.unit_of_measure}
-                    </span>
-                  </div>
-                </div>
-
-                {quickViewProduct.description && (
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Product Description
-                    </h5>
-                    <p className="text-xs text-gray-600 leading-relaxed max-h-32 overflow-y-auto pr-1">
-                      {quickViewProduct.description}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Bulk Purchasing Controls */}
-              <div className="pt-3 border-t border-gray-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-700">Order Quantity:</span>
-                  <span className="text-xs font-bold text-blue-900">
-                    Total: {formatCurrency(quickViewProduct.selling_price * quickViewQty)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center border border-gray-300 rounded-xl bg-white p-1">
-                    <button
-                      type="button"
-                      onClick={() => setQuickViewQty(Math.max(1, quickViewQty - 1))}
-                      disabled={quickViewQty <= 1}
-                      className="p-1.5 text-gray-600 hover:text-gray-900 disabled:opacity-30"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      value={quickViewQty}
-                      onChange={(e) => setQuickViewQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 text-center text-sm font-bold bg-transparent text-gray-900 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setQuickViewQty(quickViewQty + 1)}
-                      className="p-1.5 text-gray-600 hover:text-gray-900"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await handleAddToCart(quickViewProduct, quickViewQty);
-                      setQuickViewProduct(null);
-                    }}
-                    disabled={!quickViewProduct.in_stock}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white font-bold text-xs shadow-md transition-all active:scale-95"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    <span>Add {quickViewQty} to Wholesale Cart</span>
-                  </button>
-                </div>
-
-                {/* Direct WhatsApp Inquiry for This Product */}
-                <a
-                  href={`https://wa.me/94770000000?text=${encodeURIComponent(
-                    `Hello Imanya Fancy Goods, I want to inquire about wholesale order for SKU: ${quickViewProduct.sku} - ${quickViewProduct.name} (Quantity: ${quickViewQty} ${quickViewProduct.unit_of_measure})`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors"
-                >
-                  <MessageSquare className="h-4 w-4 text-emerald-600" />
-                  <span>Inquire on WhatsApp about this item</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <ProductQuickViewModal
+        product={quickViewProduct}
+        isOpen={!!quickViewProduct}
+        onClose={() => setQuickViewProduct(null)}
+        onAddToCart={handleAddToCart}
+        relatedProducts={
+          quickViewProduct
+            ? products.filter(
+                (p) => p.category_id === quickViewProduct.category_id && p.id !== quickViewProduct.id
+              )
+            : []
+        }
+        onSelectProduct={setQuickViewProduct}
+      />
     </div>
   );
 };

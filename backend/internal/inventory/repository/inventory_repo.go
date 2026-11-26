@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"wholesale-management/internal/inventory/model"
+	"distribution-management/internal/inventory/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

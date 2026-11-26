@@ -22,11 +22,12 @@ type User struct {
 	Username     string    `gorm:"type:varchar(100);not null;unique" json:"username"`
 	Email        string    `gorm:"type:varchar(255);not null;unique" json:"email"`
 	PasswordHash string    `gorm:"type:varchar(255);not null" json:"-"`
-	FirstName    string    `gorm:"type:varchar(100);not null" json:"first_name"`
-	LastName     string    `gorm:"type:varchar(100);not null" json:"last_name"`
-	IsActive     bool      `gorm:"not null;default:true" json:"is_active"`
-	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	FirstName     string    `gorm:"type:varchar(100);not null" json:"first_name"`
+	LastName      string    `gorm:"type:varchar(100);not null" json:"last_name"`
+	IsActive      bool      `gorm:"not null;default:true" json:"is_active"`
+	EmailVerified bool      `gorm:"not null;default:false" json:"email_verified"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (User) TableName() string {

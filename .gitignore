@@ -1,10 +1,13 @@
 # Binaries and build artifacts
+bin/
 backend/tmp/
 backend/bin/
 backend/uploads/
 frontend/dist/
+frontend/.vite/
 frontend/node_modules/
 node_modules/
+.gitignore.backup
 
 # Environment files
 *.env

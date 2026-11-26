@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"wholesale-management/internal/procurement/model"
+	"distribution-management/internal/procurement/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

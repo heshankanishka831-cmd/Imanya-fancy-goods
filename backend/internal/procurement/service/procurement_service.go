@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"wholesale-management/internal/audit/service"
-	invService "wholesale-management/internal/inventory/service"
-	"wholesale-management/internal/procurement/dto"
-	"wholesale-management/internal/procurement/model"
-	"wholesale-management/internal/procurement/repository"
-	supplierRepo "wholesale-management/internal/suppliers/repository"
+	"distribution-management/internal/audit/service"
+	invService "distribution-management/internal/inventory/service"
+	"distribution-management/internal/procurement/dto"
+	"distribution-management/internal/procurement/model"
+	"distribution-management/internal/procurement/repository"
+	supplierRepo "distribution-management/internal/suppliers/repository"
 
 	"gorm.io/gorm"
 )

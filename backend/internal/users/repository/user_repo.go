@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
-	"wholesale-management/internal/users/model"
+	"strings"
+
+	"distribution-management/internal/users/model"
 
 	"gorm.io/gorm"
 )
@@ -36,7 +38,8 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*model.User, e
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
-	err := r.db.WithContext(ctx).Preload("Role").Where("email = ?", email).First(&user).Error
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	err := r.db.WithContext(ctx).Preload("Role").Where("LOWER(email) = ?", normalized).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +48,8 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*model.U
 
 func (r *userRepository) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	var user model.User
-	err := r.db.WithContext(ctx).Preload("Role").Where("username = ?", username).First(&user).Error
+	trimmed := strings.TrimSpace(username)
+	err := r.db.WithContext(ctx).Preload("Role").Where("username = ? OR LOWER(username) = LOWER(?)", trimmed, trimmed).First(&user).Error
 	if err != nil {
 		return nil, err
 	}

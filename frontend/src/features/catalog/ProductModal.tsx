@@ -4,7 +4,22 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { adminApi } from '../../services/endpoints';
 import { ProductAdmin, Category, ProductImage } from '../../types';
-import { AlertCircle, Tag, Sparkles, ImagePlus, X, Star, Check } from 'lucide-react';
+import { AlertCircle, Tag, Sparkles, ImagePlus, X, Star, Check, Percent, Calendar } from 'lucide-react';
+import { formatCurrency } from '../../utils/formatters';
+import { notifyCatalogUpdated } from '../../utils/catalogSync';
+
+const formatForDateTimeLocal = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const offset = d.getTimezoneOffset() * 60000;
+    const local = new Date(d.getTime() - offset);
+    return local.toISOString().slice(0, 16);
+  } catch {
+    return '';
+  }
+};
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -39,6 +54,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     cost_price: 0,
     initial_stock: 0,
     low_stock_threshold: 5,
+    min_order_quantity: 1,
+    is_discount_enabled: false,
+    discount_percent: 0,
+    discount_start_date: '',
+    discount_end_date: '',
     is_active: true,
   });
 
@@ -64,10 +84,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         name: productToEdit.name,
         description: productToEdit.description || '',
         unit_of_measure: productToEdit.unit_of_measure,
-        selling_price: Math.round(productToEdit.selling_price || 0),
-        cost_price: Math.round(productToEdit.cost_price || 0),
+        selling_price: Math.round((Number(productToEdit.selling_price) || 0) * 100) / 100,
+        cost_price: Math.round((Number(productToEdit.cost_price) || 0) * 100) / 100,
         initial_stock: Math.round(productToEdit.current_stock || 0),
         low_stock_threshold: Math.round(productToEdit.low_stock_threshold || 5),
+        min_order_quantity: Math.max(1, Math.round(productToEdit.min_order_quantity || 1)),
+        is_discount_enabled: Boolean(productToEdit.is_discount_enabled),
+        discount_percent: productToEdit.discount_percent || 0,
+        discount_start_date: formatForDateTimeLocal(productToEdit.discount_start_date),
+        discount_end_date: formatForDateTimeLocal(productToEdit.discount_end_date),
         is_active: productToEdit.is_active,
       });
       setExistingImages(productToEdit.images || []);
@@ -82,6 +107,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         cost_price: 0,
         initial_stock: 0,
         low_stock_threshold: 5,
+        min_order_quantity: 1,
+        is_discount_enabled: false,
+        discount_percent: 0,
+        discount_start_date: '',
+        discount_end_date: '',
         is_active: true,
       });
       setExistingImages([]);
@@ -92,7 +122,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     setImagesToDelete([]);
     setImageError(null);
     setError(null);
-  }, [productToEdit, isOpen, localCategories]);
+    // Deliberately exclude localCategories so typing in the form isn't wiped when categories refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productToEdit?.id, isOpen]);
 
   // Active photos calculation (Max 5)
   const activeExistingImages = existingImages.filter((img) => !imagesToDelete.includes(img.id));
@@ -165,7 +197,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         // Auto-create category in the database on the fly!
         const catRes = await adminApi.createCategory({
           name: trimmedCat,
-          description: 'Wholesale product classification',
+          description: 'Sales product classification',
           is_active: true,
         });
 
@@ -181,8 +213,43 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         }
       }
 
-      // 2. Create or Update Product with integer prices & stock
+      // 2. Validate and Create/Update Product with discount settings
       let productId = productToEdit?.id;
+
+      const minOrderQty = Math.max(1, Math.round(Number(formData.min_order_quantity) || 1));
+      const sellingPrice = Math.max(0, Math.round((Number(formData.selling_price) || 0) * 100) / 100);
+      const discountPercent = Math.max(0, Math.min(99.99, Math.round((Number(formData.discount_percent) || 0) * 100) / 100));
+      const discountAmount = formData.is_discount_enabled && discountPercent > 0
+        ? Math.round(sellingPrice * (discountPercent / 100) * 100) / 100
+        : 0;
+      const discountedPrice = Math.max(0, Math.round((sellingPrice - discountAmount) * 100) / 100);
+
+      if (formData.is_discount_enabled) {
+        if (discountPercent <= 0 || discountPercent >= 100) {
+          setError('Discount percentage must be greater than 0% and less than 100%');
+          setIsLoading(false);
+          return;
+        }
+        if (discountedPrice <= 0) {
+          setError('Calculated discounted price must be greater than 0');
+          setIsLoading(false);
+          return;
+        }
+        if (formData.discount_start_date && formData.discount_end_date) {
+          if (new Date(formData.discount_end_date) <= new Date(formData.discount_start_date)) {
+            setError('Discount end date must be later than the start date');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      const discountPayload = {
+        is_discount_enabled: formData.is_discount_enabled,
+        discount_percent: formData.is_discount_enabled ? discountPercent : 0,
+        discount_start_date: formData.is_discount_enabled && formData.discount_start_date ? new Date(formData.discount_start_date).toISOString() : null,
+        discount_end_date: formData.is_discount_enabled && formData.discount_end_date ? new Date(formData.discount_end_date).toISOString() : null,
+      };
 
       if (productToEdit) {
         await adminApi.updateProduct(productToEdit.id, {
@@ -190,19 +257,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           name: formData.name,
           description: formData.description,
           unit_of_measure: formData.unit_of_measure,
-          selling_price: Math.round(Number(formData.selling_price) || 0),
+          selling_price: sellingPrice,
           cost_price: Math.round(Number(formData.cost_price) || 0),
           low_stock_threshold: Math.round(Number(formData.low_stock_threshold) || 5),
+          min_order_quantity: minOrderQty,
           is_active: formData.is_active,
+          ...discountPayload,
         });
       } else {
         const res = await adminApi.createProduct({
           ...formData,
           category_id: resolvedCategoryId,
-          selling_price: Math.round(Number(formData.selling_price) || 0),
+          selling_price: sellingPrice,
           cost_price: Math.round(Number(formData.cost_price) || 0),
           initial_stock: Math.round(Number(formData.initial_stock) || 0),
           low_stock_threshold: Math.round(Number(formData.low_stock_threshold) || 5),
+          min_order_quantity: minOrderQty,
+          ...discountPayload,
         });
         productId = res.data.id;
       }
@@ -227,6 +298,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         }
       }
 
+      notifyCatalogUpdated();
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -245,11 +317,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     'Stationery',
   ];
 
+  const sellingPrice = Math.max(0, Math.round((Number(formData.selling_price) || 0) * 100) / 100);
+  const discountPercent = Math.max(0, Math.min(99.99, Math.round((Number(formData.discount_percent) || 0) * 100) / 100));
+  const discountAmount = formData.is_discount_enabled && discountPercent > 0
+    ? Math.round(sellingPrice * (discountPercent / 100) * 100) / 100
+    : 0;
+  const discountedPrice = Math.max(0, Math.round((sellingPrice - discountAmount) * 100) / 100);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={productToEdit ? 'Edit Product Item' : 'Create New Wholesale Product'}
+      title={productToEdit ? 'Edit Product Item' : 'Create New Product'}
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -333,14 +412,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <Input
             label="Selling Price (Rs.) *"
             type="number"
-            step="1"
+            step="0.01"
             min="0"
             required
             value={formData.selling_price || ''}
             onChange={(e) =>
               setFormData({
                 ...formData,
-                selling_price: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                selling_price: Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100),
               })
             }
             placeholder="e.g. 450"
@@ -363,22 +442,22 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {!productToEdit && (
-            <Input
-              label="Initial Stock Quantity"
-              type="number"
-              step="1"
-              min="0"
-              value={formData.initial_stock || ''}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  initial_stock: Math.max(0, Math.round(Number(e.target.value) || 0)),
-                })
-              }
-              placeholder="e.g. 100"
-            />
-          )}
+          <Input
+            label="Minimum Order Quantity *"
+            type="number"
+            step="1"
+            min="1"
+            required
+            value={formData.min_order_quantity}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                min_order_quantity: Math.max(1, Math.round(Number(e.target.value) || 1)),
+              })
+            }
+            helperText="Minimum units a customer must order (Default: 1)"
+            placeholder="e.g. 1, 5, 10"
+          />
 
           <Input
             label="Low-Stock Alert Threshold"
@@ -396,6 +475,191 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           />
         </div>
 
+        {!productToEdit && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Initial Stock Quantity"
+              type="number"
+              step="1"
+              min="0"
+              value={formData.initial_stock || ''}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  initial_stock: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                })
+              }
+              helperText="Initial inventory units to credit upon creation"
+              placeholder="e.g. 100"
+            />
+          </div>
+        )}
+
+        {/* Dedicated Admin Discount Management Section */}
+        <div className="bg-gradient-to-br from-slate-50 to-emerald-50/30 rounded-2xl border border-slate-200/90 p-4 space-y-3.5 shadow-2xs">
+          {/* Section Header & Toggle Switch */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-200/70">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <Percent className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 tracking-tight">Product Discount Management</h4>
+                <p className="text-[11px] text-slate-500">
+                  Configure promotional discount rate (%) and optional scheduled campaign window
+                </p>
+              </div>
+            </div>
+
+            {/* Modern ON/OFF Toggle Switch */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className={`text-[11px] font-bold ${formData.is_discount_enabled ? 'text-emerald-700' : 'text-slate-400'}`}>
+                {formData.is_discount_enabled ? 'DISCOUNT ON' : 'DISCOUNT OFF'}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={formData.is_discount_enabled}
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    is_discount_enabled: !prev.is_discount_enabled,
+                  }))
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                  formData.is_discount_enabled ? 'bg-emerald-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    formData.is_discount_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {formData.is_discount_enabled ? (
+            <div className="space-y-4 pt-1">
+              {/* Discount Percentage and Presets */}
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1">
+                      Discount Percentage (%) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="0.5"
+                        required={formData.is_discount_enabled}
+                        value={formData.discount_percent || ''}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(99, Number(e.target.value) || 0));
+                          setFormData({ ...formData, discount_percent: val });
+                        }}
+                        placeholder="e.g. 20"
+                        className="w-full rounded-xl border border-gray-300 p-2.5 pr-8 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-gray-400 text-sm">
+                        %
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Real-time Calculated Price Preview Box */}
+                  <div className="bg-white rounded-xl border border-emerald-200 p-3 shadow-2xs space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Live Price Preview
+                    </span>
+                    <div className="flex items-baseline justify-between">
+                      <div className="space-y-0.5">
+                        <span className="text-[11px] text-slate-400 line-through block">
+                          {formatCurrency(sellingPrice)}
+                        </span>
+                        <div className="text-base font-black text-emerald-700">
+                          {formatCurrency(discountedPrice)}
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            /{formData.unit_of_measure}
+                          </span>
+                        </div>
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="text-right">
+                          <span className="inline-flex items-center text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                            Save {formatCurrency(discountAmount)} ({formData.discount_percent}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-slate-400 font-semibold">Quick Rates:</span>
+                  {[5, 10, 15, 20, 25, 30, 40, 50].map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, discount_percent: rate })}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all border ${
+                        formData.discount_percent === rate
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+                      }`}
+                    >
+                      {rate}% OFF
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Optional Date Scheduling (Start / End Date) */}
+              <div className="pt-2 border-t border-slate-200/60">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-2">
+                  <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Optional Campaign Schedule (Leave blank for immediate & ongoing discount)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                      Discount Start Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.discount_start_date}
+                      onChange={(e) => setFormData({ ...formData, discount_start_date: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 p-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Discount activates automatically on this date</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                      Discount End Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.discount_end_date}
+                      onChange={(e) => setFormData({ ...formData, discount_end_date: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 p-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Discount automatically expires after this date</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500 italic">
+              Discount toggle is currently OFF. The product will be listed and sold at its regular original price ({formatCurrency(sellingPrice)}).
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1">
             Product Description
@@ -405,7 +669,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             className="w-full rounded-xl border border-gray-300 p-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Wholesale packaging specs, color variants, carton quantity, origin..."
+            placeholder="Packaging specs, color variants, carton quantity, origin..."
           />
         </div>
 

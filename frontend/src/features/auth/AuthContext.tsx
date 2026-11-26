@@ -3,9 +3,22 @@ import { User } from '../../types';
 import { authApi } from '../../services/endpoints';
 
 export interface CustomerProfile {
+  id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
   business_name?: string;
   phone?: string;
+  residential_address?: string;
+  delivery_address?: string;
   address?: string;
+  del_city?: string;
+  res_city?: string;
+  del_postal_code?: string;
+  res_postal_code?: string;
+  membership_tier?: string;
+  lifetime_spent?: number;
+  profile_photo_url?: string;
 }
 
 interface AuthContextType {
@@ -14,16 +27,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<User>;
-  registerCustomer: (data: {
-    first_name: string;
-    last_name: string;
-    username: string;
-    email: string;
-    password: string;
-    phone: string;
-    business_name?: string;
-    address?: string;
-  }) => Promise<void>;
+  syncCustomerSession: (userUpdates: Partial<User>, profileUpdates: Partial<CustomerProfile>) => void;
   logout: () => void;
   hasRole: (...roles: string[]) => boolean;
 }
@@ -56,7 +60,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const profile: CustomerProfile = {
         business_name: res.data.business_name,
         phone: res.data.phone,
-        address: res.data.address,
+        residential_address: res.data.residential_address,
+        delivery_address: res.data.delivery_address || res.data.address,
+        address: res.data.address || res.data.delivery_address,
+        membership_tier: res.data.membership_tier,
       };
       setCustomerProfile(profile);
       localStorage.setItem('customerProfile', JSON.stringify(profile));
@@ -65,31 +72,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throw new Error('Login failed');
   };
 
-  const registerCustomer = async (data: {
-    first_name: string;
-    last_name: string;
-    username: string;
-    email: string;
-    password: string;
-    phone: string;
-    business_name?: string;
-    address?: string;
-  }) => {
-    const res = await authApi.register(data);
-    if (res.success && res.data) {
-      setUser(res.data.user);
-      setToken(res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
-      localStorage.setItem('token', res.data.token);
-
-      const profile: CustomerProfile = {
-        business_name: res.data.business_name,
-        phone: res.data.phone,
-        address: res.data.address,
-      };
-      setCustomerProfile(profile);
-      localStorage.setItem('customerProfile', JSON.stringify(profile));
-    }
+  const syncCustomerSession = (
+    userUpdates: Partial<User>,
+    profileUpdates: Partial<CustomerProfile>
+  ) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...userUpdates };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+    setCustomerProfile((prev) => {
+      const next = { ...(prev || {}), ...profileUpdates };
+      localStorage.setItem('customerProfile', JSON.stringify(next));
+      return next;
+    });
   };
 
   const logout = () => {
@@ -115,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated: !!token,
         login,
-        registerCustomer,
+        syncCustomerSession,
         logout,
         hasRole,
       }}

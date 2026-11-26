@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminApi } from '../../services/endpoints';
 import { Category } from '../../types';
 import { formatDate } from '../../utils/formatters';
@@ -7,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { CategoryModal } from './CategoryModal';
-import { Plus, Edit2, Trash2, Layers } from 'lucide-react';
+import { Plus, Edit2, Trash2, Layers, Package, ExternalLink } from 'lucide-react';
 
 export const CategoryListPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -48,7 +49,7 @@ export const CategoryListPage: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-bold text-gray-900 tracking-tight">Product Categories</h2>
-          <p className="text-xs text-gray-500">Manage classification hierarchy for wholesale inventory</p>
+          <p className="text-xs text-gray-500">Manage classification hierarchy for sales inventory</p>
         </div>
         <Button
           onClick={() => {
@@ -95,20 +96,28 @@ export const CategoryListPage: React.FC = () => {
                       </Badge>
                     </td>
                     <td className="py-3.5 text-gray-400">{formatDate(c.created_at)}</td>
-                    <td className="py-3.5 text-right space-x-2">
+                    <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
+                      <Link
+                        to={`/admin/products?category_id=${c.id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-semibold transition-colors mr-1"
+                        title="View Products in this category"
+                      >
+                        <Package className="h-3 w-3" />
+                        <span>View Products</span>
+                      </Link>
                       <button
                         onClick={() => {
                           setEditingCategory(c);
                           setIsModalOpen(true);
                         }}
-                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors inline-flex align-middle"
                         title="Edit Category"
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(c.id)}
-                        className="p-1 text-gray-400 hover:text-rose-600 transition-colors"
+                        className="p-1 text-gray-400 hover:text-rose-600 transition-colors inline-flex align-middle"
                         title="Delete Category"
                       >
                         <Trash2 className="h-4 w-4" />

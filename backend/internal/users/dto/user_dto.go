@@ -8,10 +8,11 @@ type UserResponse struct {
 	RoleName  string    `json:"role_name"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	FirstName     string    `json:"first_name"`
+	LastName      string    `json:"last_name"`
+	IsActive      bool      `json:"is_active"`
+	EmailVerified bool      `json:"email_verified"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type CreateUserRequest struct {

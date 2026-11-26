@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/users/dto"
-	"wholesale-management/internal/users/model"
-	"wholesale-management/internal/users/repository"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/users/dto"
+	"distribution-management/internal/users/model"
+	"distribution-management/internal/users/repository"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

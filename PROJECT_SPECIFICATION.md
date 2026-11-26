@@ -1,15 +1,15 @@
-# Import & Wholesale Distribution Management System
+# Import & Distribution Management System
 ## Project Specification and Architecture Blueprint
 
 **Document purpose:** Single source of truth for AI-assisted planning and implementation.  
-**Project type:** Web-based Import & Wholesale Distribution Management System  
+**Project type:** Web-based Import & Distribution Management System  
 **Architecture:** Modular Monolith with REST API  
 **Status:** Requirements baseline with confirmed architecture and relational schema.  
 
 ---
 
 ## 1. Project Overview
-Build a secure web-based system for an import and wholesale distribution business. The solution has two main user-facing areas:
+Build a secure web-based system for an import and distribution business. The solution has two main user-facing areas:
 1. **Customer-facing website** where customers can browse products, search/filter the catalogue, manage a cart, and submit orders. WhatsApp Click-to-Chat can be used to send an order summary to the business.
 2. **Secure administration dashboard** where authorized staff manage products, categories, suppliers, imports/purchase orders, inventory, customers, orders, reporting, and audit history.
 
@@ -29,7 +29,7 @@ The system must keep order and inventory records in its own database. WhatsApp i
 ## 2. Confirmed Technology Stack
 - **Frontend:** React, TypeScript, Vite, React Router, Tailwind CSS, Lucide React, Centralized Axios API client.
 - **Backend:** Go (1.27+), Gin HTTP framework, GORM ORM, PostgreSQL driver, golang-migrate, JWT authentication, Casbin RBAC, go-playground/validator, Zap structured logging, Testify.
-- **Database:** PostgreSQL (v18+), database name: `wholesale_management`.
+- **Database:** PostgreSQL (v18+), database name: `distribution_management`.
 - **Architecture:** Modular Monolith with layered modules (handler, service, repository, model, dto).
 
 ---

@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
-	"wholesale-management/internal/platform/response"
-	"wholesale-management/internal/reports/service"
+	"distribution-management/internal/platform/response"
+	"distribution-management/internal/reports/service"
 
 	"github.com/gin-gonic/gin"
 )

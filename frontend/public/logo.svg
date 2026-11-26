@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bagGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#235D8C" />
+      <stop offset="60%" stop-color="#2C6291" />
+      <stop offset="100%" stop-color="#4C9091" />
+    </linearGradient>
+    <filter id="subtleGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08" />
+    </filter>
+  </defs>
+
+  <!-- Clean Background & Outer Lime Green Circle -->
+  <circle cx="250" cy="250" r="240" fill="#FFFFFF" />
+  <circle cx="250" cy="250" r="230" fill="none" stroke="#9AC640" stroke-width="12" />
+
+  <!-- Shopping Bag Graphic -->
+  <g transform="translate(0, -8)">
+    <!-- Bag Handle -->
+    <path
+      d="M 222 152 C 222 118, 278 118, 278 152"
+      fill="none"
+      stroke="#235D8C"
+      stroke-width="8"
+      stroke-linecap="round"
+    />
+
+    <!-- Bag Body -->
+    <path
+      d="M 208 150 L 292 150 C 298 150, 303 154, 304 160 L 318 226 C 319 232, 315 238, 308 238 L 192 238 C 185 238, 181 232, 182 226 L 196 160 C 197 154, 202 150, 208 150 Z"
+      fill="url(#bagGradient)"
+    />
+
+    <!-- Upper Small Sparkle Star (Imanya Blue) -->
+    <path
+      d="M 326 162 Q 326 174, 338 174 Q 326 174, 326 186 Q 326 174, 314 174 Q 326 174, 326 162 Z"
+      fill="#235D8C"
+    />
+
+    <!-- Lower Large Sparkle Star (Crisp White Accent Overlapping Bag Edge) -->
+    <path
+      d="M 304 186 Q 304 206, 324 206 Q 304 206, 304 226 Q 304 206, 284 206 Q 304 206, 304 186 Z"
+      fill="#FFFFFF"
+    />
+  </g>
+
+  <!-- Typography -->
+  <!-- "IMANYA" in Elegant Lime Green Serif -->
+  <text
+    x="250"
+    y="298"
+    text-anchor="middle"
+    font-family="'Playfair Display', 'Cinzel', 'Georgia', 'Times New Roman', serif"
+    font-size="62"
+    font-weight="700"
+    letter-spacing="5"
+    fill="#9AC640"
+  >
+    IMANYA
+  </text>
+
+  <!-- "FANCY" in Bold Imanya Blue Sans-Serif -->
+  <text
+    x="250"
+    y="346"
+    text-anchor="middle"
+    font-family="'Inter', 'Montserrat', 'Segoe UI', system-ui, sans-serif"
+    font-size="36"
+    font-weight="900"
+    letter-spacing="5"
+    fill="#2C6291"
+  >
+    FANCY
+  </text>
+
+  <!-- "GOODS" in Bold Imanya Blue Sans-Serif -->
+  <text
+    x="250"
+    y="386"
+    text-anchor="middle"
+    font-family="'Inter', 'Montserrat', 'Segoe UI', system-ui, sans-serif"
+    font-size="36"
+    font-weight="900"
+    letter-spacing="5"
+    fill="#2C6291"
+  >
+    GOODS
+  </text>
+</svg>

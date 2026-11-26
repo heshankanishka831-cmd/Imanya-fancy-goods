@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"wholesale-management/internal/catalog/repository"
-	"wholesale-management/internal/catalog/service"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/catalog/repository"
+	"distribution-management/internal/catalog/service"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,6 +60,8 @@ func (h *PublicCatalogHandler) ListProducts(c *gin.Context) {
 		TotalPages:  totalPages,
 	}
 
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
 	response.SuccessWithMeta(c, http.StatusOK, products, meta)
 }
 
@@ -71,5 +73,7 @@ func (h *PublicCatalogHandler) GetProduct(c *gin.Context) {
 		return
 	}
 
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
 	response.Success(c, http.StatusOK, p)
 }

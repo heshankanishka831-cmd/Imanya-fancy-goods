@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"testing"
-	"wholesale-management/internal/inventory/model"
+	"distribution-management/internal/inventory/model"
 
 	"github.com/stretchr/testify/assert"
 )

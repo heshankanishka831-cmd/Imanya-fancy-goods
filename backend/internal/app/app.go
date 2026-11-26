@@ -9,56 +9,64 @@ import (
 	"syscall"
 	"time"
 
-	"wholesale-management/internal/config"
-	"wholesale-management/internal/platform/database"
-	"wholesale-management/internal/platform/logger"
-	"wholesale-management/internal/platform/middleware"
-	"wholesale-management/internal/platform/storage"
+	"distribution-management/internal/config"
+	"distribution-management/internal/platform/database"
+	"distribution-management/internal/platform/email"
+	"distribution-management/internal/platform/logger"
+	"distribution-management/internal/platform/middleware"
+	"distribution-management/internal/platform/storage"
 
 	// Module layers
-	auditRepo "wholesale-management/internal/audit/repository"
-	auditService "wholesale-management/internal/audit/service"
-	auditHandler "wholesale-management/internal/audit/handler"
+	auditRepo "distribution-management/internal/audit/repository"
+	auditService "distribution-management/internal/audit/service"
+	auditHandler "distribution-management/internal/audit/handler"
 
-	userRepo "wholesale-management/internal/users/repository"
-	userService "wholesale-management/internal/users/service"
-	userHandler "wholesale-management/internal/users/handler"
+	userRepo "distribution-management/internal/users/repository"
+	userService "distribution-management/internal/users/service"
+	userHandler "distribution-management/internal/users/handler"
 
-	authService "wholesale-management/internal/auth/service"
-	authHandler "wholesale-management/internal/auth/handler"
+	authService "distribution-management/internal/auth/service"
+	authHandler "distribution-management/internal/auth/handler"
 
-	invRepo "wholesale-management/internal/inventory/repository"
-	invService "wholesale-management/internal/inventory/service"
-	invHandler "wholesale-management/internal/inventory/handler"
+	invRepo "distribution-management/internal/inventory/repository"
+	invService "distribution-management/internal/inventory/service"
+	invHandler "distribution-management/internal/inventory/handler"
 
-	catalogRepo "wholesale-management/internal/catalog/repository"
-	catalogService "wholesale-management/internal/catalog/service"
-	catalogHandler "wholesale-management/internal/catalog/handler"
+	catalogRepo "distribution-management/internal/catalog/repository"
+	catalogService "distribution-management/internal/catalog/service"
+	catalogHandler "distribution-management/internal/catalog/handler"
 
-	supplierRepo "wholesale-management/internal/suppliers/repository"
-	supplierService "wholesale-management/internal/suppliers/service"
-	supplierHandler "wholesale-management/internal/suppliers/handler"
+	supplierRepo "distribution-management/internal/suppliers/repository"
+	supplierService "distribution-management/internal/suppliers/service"
+	supplierHandler "distribution-management/internal/suppliers/handler"
 
-	procurementRepo "wholesale-management/internal/procurement/repository"
-	procurementService "wholesale-management/internal/procurement/service"
-	procurementHandler "wholesale-management/internal/procurement/handler"
+	procurementRepo "distribution-management/internal/procurement/repository"
+	procurementService "distribution-management/internal/procurement/service"
+	procurementHandler "distribution-management/internal/procurement/handler"
 
-	customerRepo "wholesale-management/internal/customers/repository"
-	customerService "wholesale-management/internal/customers/service"
-	customerHandler "wholesale-management/internal/customers/handler"
+	customerRepo "distribution-management/internal/customers/repository"
+	customerService "distribution-management/internal/customers/service"
+	customerHandler "distribution-management/internal/customers/handler"
 
-	cartRepo "wholesale-management/internal/carts/repository"
-	cartService "wholesale-management/internal/carts/service"
-	cartHandler "wholesale-management/internal/carts/handler"
+	cartRepo "distribution-management/internal/carts/repository"
+	cartService "distribution-management/internal/carts/service"
+	cartHandler "distribution-management/internal/carts/handler"
 
-	whatsappService "wholesale-management/internal/whatsapp/service"
+	whatsappService "distribution-management/internal/whatsapp/service"
 
-	orderRepo "wholesale-management/internal/orders/repository"
-	orderService "wholesale-management/internal/orders/service"
-	orderHandler "wholesale-management/internal/orders/handler"
+	orderRepo "distribution-management/internal/orders/repository"
+	orderService "distribution-management/internal/orders/service"
+	orderHandler "distribution-management/internal/orders/handler"
 
-	reportService "wholesale-management/internal/reports/service"
-	reportHandler "wholesale-management/internal/reports/handler"
+	reportService "distribution-management/internal/reports/service"
+	reportHandler "distribution-management/internal/reports/handler"
+
+	loyaltyRepo "distribution-management/internal/loyalty/repository"
+	loyaltyService "distribution-management/internal/loyalty/service"
+	loyaltyHandler "distribution-management/internal/loyalty/handler"
+
+	otpRepoPkg "distribution-management/internal/otp/repository"
+	otpSvc "distribution-management/internal/otp/service"
 )
 
 type Application struct {
@@ -100,6 +108,25 @@ func Bootstrap() (*Application, error) {
 		return nil, fmt.Errorf("failed to initialize casbin enforcer: %w", err)
 	}
 
+	// Email / SMTP Validation & Safe Diagnostic Logging (never log SMTP_PASSWORD or full secrets)
+	emailSender := email.NewSMTPMailer(cfg)
+	smtpErr := emailSender.ValidateConfig()
+	logger.Log.Infof(
+		"Startup env diagnostics: env_files_loaded=%v smtp_host=%s smtp_port=%d smtp_email_loaded=%t smtp_sender=%s smtp_password_configured=%t smtp_valid=%t",
+		cfg.LoadedEnvFiles,
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		cfg.SMTPEmail != "",
+		cfg.MaskedSMTPEmail(),
+		cfg.SMTPPassword != "",
+		smtpErr == nil,
+	)
+	if smtpErr != nil {
+		logger.Log.Warnf("SMTP configuration incomplete (%v). Configure SMTP_HOST, SMTP_PORT, SMTP_EMAIL, and SMTP_PASSWORD in backend/.env for Email OTP delivery.", smtpErr)
+	} else {
+		logger.Log.Infof("SMTP email verification configured (%s:%d as %s)", cfg.SMTPHost, cfg.SMTPPort, cfg.MaskedSMTPEmail())
+	}
+
 	// Repositories
 	aRepo := auditRepo.NewAuditRepository(db.DB)
 	uRepo := userRepo.NewUserRepository(db.DB)
@@ -111,20 +138,27 @@ func Bootstrap() (*Application, error) {
 	custRepo := customerRepo.NewCustomerRepository(db.DB)
 	cRepo := cartRepo.NewCartRepository(db.DB)
 	oRepo := orderRepo.NewOrderRepository(db.DB)
+	lRepo := loyaltyRepo.NewLoyaltyRepository(db.DB)
+	oOTPRepo := otpRepoPkg.NewOTPRepository(db.DB)
 
 	// Services
 	aService := auditService.NewAuditService(aRepo)
 	uService := userService.NewUserService(uRepo, aService)
-	authSvc := authService.NewAuthService(uRepo, custRepo, aService, cfg.JWTSecret, cfg.JWTExpirationHours, db.DB)
+	otpService := otpSvc.NewOTPService(oOTPRepo, emailSender, cfg.SMTPFromName)
+	authSvc := authService.NewAuthService(uRepo, custRepo, otpService, aService, cfg.JWTSecret, cfg.JWTExpirationHours, db.DB)
 	iService := invService.NewInventoryService(iRepo, aService, db.DB)
 	catService := catalogService.NewCategoryService(catRepo, aService)
 	prodService := catalogService.NewProductService(prodRepo, catRepo, iService, aService, diskStorage, db.DB)
 	sService := supplierService.NewSupplierService(sRepo, aService)
 	procService := procurementService.NewProcurementService(procRepo, sRepo, iService, aService, db.DB)
 	custService := customerService.NewCustomerService(custRepo, aService)
+	custService.ConfigureEmailVerification(otpService, oOTPRepo, db.DB)
+	custService.ConfigureStorage(diskStorage)
 	cService := cartService.NewCartService(cRepo, prodRepo, iService)
 	waService := whatsappService.NewWhatsAppService(cfg.WhatsAppPhoneNumber, cfg.WhatsAppPrefix)
-	oService := orderService.NewOrderService(oRepo, cRepo, custRepo, custService, iService, waService, aService, db.DB)
+	waService.ConfigureCloudAPI(cfg.WhatsAppCloudAPIToken, cfg.WhatsAppPhoneNumberID, cfg.WhatsAppAPIVersion)
+	lService := loyaltyService.NewLoyaltyService(lRepo, aService)
+	oService := orderService.NewOrderService(oRepo, cRepo, custRepo, custService, iService, lService, waService, aService, db.DB)
 	repService := reportService.NewReportService(db.DB)
 
 	// Handlers
@@ -141,6 +175,7 @@ func Bootstrap() (*Application, error) {
 	cartHdlr := cartHandler.NewCartHandler(cService)
 	oHandler := orderHandler.NewOrderHandler(oService, custService)
 	repHdlr := reportHandler.NewReportHandler(repService)
+	loyaltyHdlr := loyaltyHandler.NewLoyaltyHandler(lService, custRepo)
 
 	router := SetupRouter(
 		cfg,
@@ -158,6 +193,7 @@ func Bootstrap() (*Application, error) {
 		oHandler,
 		repHdlr,
 		aHandler,
+		loyaltyHdlr,
 	)
 
 	server := &http.Server{
@@ -177,7 +213,7 @@ func Bootstrap() (*Application, error) {
 
 func (app *Application) Run() error {
 	go func() {
-		logger.Log.Infof("Starting Wholesale Distribution API server on port %s", app.Config.ServerPort)
+		logger.Log.Infof("Starting Distribution API server on port %s", app.Config.ServerPort)
 		if err := app.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Log.Fatalf("HTTP server failed to start: %v", err)
 		}

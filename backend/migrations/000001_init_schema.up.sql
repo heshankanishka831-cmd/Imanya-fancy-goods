@@ -1,5 +1,5 @@
 -- 000001_init_schema.up.sql
--- PostgreSQL Migration for Wholesale Management System
+-- PostgreSQL Migration for Sales Management System
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

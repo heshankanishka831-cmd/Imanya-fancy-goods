@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"mime/multipart"
+	"time"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/catalog/dto"
-	"wholesale-management/internal/catalog/model"
-	"wholesale-management/internal/catalog/repository"
-	invService "wholesale-management/internal/inventory/service"
-	"wholesale-management/internal/platform/storage"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/catalog/dto"
+	"distribution-management/internal/catalog/model"
+	"distribution-management/internal/catalog/repository"
+	invService "distribution-management/internal/inventory/service"
+	"distribution-management/internal/platform/storage"
 
 	"gorm.io/gorm"
 )
@@ -77,16 +79,52 @@ func (s *productService) Create(ctx context.Context, actorID string, req *dto.Cr
 		lowStock = req.LowStockThreshold
 	}
 
+	minOrderQty := 1
+	if req.MinOrderQuantity > 1 {
+		minOrderQty = req.MinOrderQuantity
+	}
+
+	isDiscountEnabled := false
+	if req.IsDiscountEnabled != nil {
+		isDiscountEnabled = *req.IsDiscountEnabled
+	}
+
+	discountPercent := 0.0
+	var discountStartDate *time.Time
+	var discountEndDate *time.Time
+
+	if isDiscountEnabled {
+		if req.DiscountPercent <= 0 || req.DiscountPercent >= 100 {
+			return nil, errors.New("discount percentage must be greater than 0 and less than 100")
+		}
+		discountPercent = math.Round(req.DiscountPercent*100) / 100
+		if req.DiscountStartDate != nil && req.DiscountEndDate != nil && req.DiscountEndDate.Before(*req.DiscountStartDate) {
+			return nil, errors.New("discount end date cannot be earlier than start date")
+		}
+		discountStartDate = req.DiscountStartDate
+		discountEndDate = req.DiscountEndDate
+
+		calculatedDiscount := math.Round(req.SellingPrice*(discountPercent/100.0)*100) / 100
+		if req.SellingPrice-calculatedDiscount <= 0 {
+			return nil, errors.New("discounted price must be greater than 0")
+		}
+	}
+
 	product := &model.Product{
-		CategoryID:    req.CategoryID,
-		SKU:           req.SKU,
-		Name:          req.Name,
-		Slug:          slug,
-		Description:   req.Description,
-		UnitOfMeasure: req.UnitOfMeasure,
-		SellingPrice:  req.SellingPrice,
-		CostPrice:     req.CostPrice,
-		IsActive:      isActive,
+		CategoryID:        req.CategoryID,
+		SKU:               req.SKU,
+		Name:              req.Name,
+		Slug:              slug,
+		Description:       req.Description,
+		UnitOfMeasure:     req.UnitOfMeasure,
+		SellingPrice:      req.SellingPrice,
+		CostPrice:         req.CostPrice,
+		MinOrderQuantity:  minOrderQty,
+		IsDiscountEnabled: isDiscountEnabled,
+		DiscountPercent:   discountPercent,
+		DiscountStartDate: discountStartDate,
+		DiscountEndDate:   discountEndDate,
+		IsActive:          isActive,
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -147,8 +185,36 @@ func (s *productService) Update(ctx context.Context, actorID string, id string, 
 	product.UnitOfMeasure = req.UnitOfMeasure
 	product.SellingPrice = req.SellingPrice
 	product.CostPrice = req.CostPrice
+	if req.MinOrderQuantity >= 1 {
+		product.MinOrderQuantity = req.MinOrderQuantity
+	}
 	if req.IsActive != nil {
 		product.IsActive = *req.IsActive
+	}
+
+	if req.IsDiscountEnabled != nil {
+		product.IsDiscountEnabled = *req.IsDiscountEnabled
+	}
+	if product.IsDiscountEnabled {
+		if req.DiscountPercent <= 0 || req.DiscountPercent >= 100 {
+			return nil, errors.New("discount percentage must be greater than 0 and less than 100")
+		}
+		product.DiscountPercent = math.Round(req.DiscountPercent*100) / 100
+		if req.DiscountStartDate != nil && req.DiscountEndDate != nil && req.DiscountEndDate.Before(*req.DiscountStartDate) {
+			return nil, errors.New("discount end date cannot be earlier than start date")
+		}
+		product.DiscountStartDate = req.DiscountStartDate
+		product.DiscountEndDate = req.DiscountEndDate
+
+		calculatedDiscount := math.Round(product.SellingPrice*(product.DiscountPercent/100.0)*100) / 100
+		if product.SellingPrice-calculatedDiscount <= 0 {
+			return nil, errors.New("discounted price must be greater than 0")
+		}
+	} else {
+		product.IsDiscountEnabled = false
+		product.DiscountPercent = 0
+		product.DiscountStartDate = nil
+		product.DiscountEndDate = nil
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -331,6 +397,15 @@ func toProductAdminResponse(p *model.Product) *dto.ProductAdminResponse {
 		isLowStock = availableStock <= lowStockThreshold
 	}
 
+	minOrderQty := 1
+	if p.MinOrderQuantity > 1 {
+		minOrderQty = p.MinOrderQuantity
+	}
+
+	now := time.Now()
+	effPrice, discAmt, _, isDiscActive := p.EffectivePrice(now)
+	discStatus := p.DiscountStatus(now)
+
 	return &dto.ProductAdminResponse{
 		ID:                p.ID,
 		CategoryID:        p.CategoryID,
@@ -342,6 +417,15 @@ func toProductAdminResponse(p *model.Product) *dto.ProductAdminResponse {
 		UnitOfMeasure:     p.UnitOfMeasure,
 		SellingPrice:      p.SellingPrice,
 		CostPrice:         p.CostPrice,
+		MinOrderQuantity:  minOrderQty,
+		IsDiscountEnabled: p.IsDiscountEnabled,
+		DiscountPercent:   p.DiscountPercent,
+		DiscountStartDate: p.DiscountStartDate,
+		DiscountEndDate:   p.DiscountEndDate,
+		DiscountedPrice:   effPrice,
+		DiscountAmount:    discAmt,
+		IsDiscountActive:  isDiscActive,
+		DiscountStatus:    discStatus,
 		CurrentStock:      currentStock,
 		AllocatedStock:    allocatedStock,
 		AvailableStock:    availableStock,
@@ -374,18 +458,39 @@ func toProductPublicResponse(p *model.Product) *dto.ProductPublicResponse {
 		}
 	}
 
+	minOrderQty := 1
+	if p.MinOrderQuantity > 1 {
+		minOrderQty = p.MinOrderQuantity
+	}
+
+	now := time.Now()
+	effPrice, discAmt, discPct, isDiscActive := p.EffectivePrice(now)
+	discStatus := p.DiscountStatus(now)
+	if !isDiscActive && discStatus == "ACTIVE" {
+		discStatus = "DISABLED"
+	}
+
 	return &dto.ProductPublicResponse{
-		ID:             p.ID,
-		CategoryID:     p.CategoryID,
-		CategoryName:   p.Category.Name,
-		SKU:            p.SKU,
-		Name:           p.Name,
-		Slug:           p.Slug,
-		Description:    p.Description,
-		UnitOfMeasure:  p.UnitOfMeasure,
-		SellingPrice:   p.SellingPrice,
-		InStock:        inStock,
-		AvailableStock: availStock,
-		Images:         images,
+		ID:                p.ID,
+		CategoryID:        p.CategoryID,
+		CategoryName:      p.Category.Name,
+		SKU:               p.SKU,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		Description:       p.Description,
+		UnitOfMeasure:     p.UnitOfMeasure,
+		SellingPrice:      p.SellingPrice,
+		MinOrderQuantity:  minOrderQty,
+		IsDiscountEnabled: p.IsDiscountEnabled,
+		IsDiscountActive:  isDiscActive,
+		DiscountStatus:    discStatus,
+		DiscountPercent:   discPct,
+		DiscountedPrice:   effPrice,
+		DiscountAmount:    discAmt,
+		DiscountStartDate: p.DiscountStartDate,
+		DiscountEndDate:   p.DiscountEndDate,
+		InStock:           inStock,
+		AvailableStock:    availStock,
+		Images:            images,
 	}
 }

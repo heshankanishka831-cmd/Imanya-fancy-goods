@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
-	"wholesale-management/internal/carts/dto"
-	"wholesale-management/internal/carts/model"
-	"wholesale-management/internal/carts/repository"
-	catalogRepo "wholesale-management/internal/catalog/repository"
-	invService "wholesale-management/internal/inventory/service"
+	"distribution-management/internal/carts/dto"
+	"distribution-management/internal/carts/model"
+	"distribution-management/internal/carts/repository"
+	catalogRepo "distribution-management/internal/catalog/repository"
+	invService "distribution-management/internal/inventory/service"
 )
 
 type CartService interface {
@@ -67,6 +69,14 @@ func (s *cartService) AddItem(ctx context.Context, sessionID string, customerID 
 		return nil, errors.New("product is not available for purchase")
 	}
 
+	minQty := 1
+	if product.MinOrderQuantity > 1 {
+		minQty = product.MinOrderQuantity
+	}
+	if req.Quantity < minQty {
+		return nil, fmt.Errorf("product %q requires a minimum order quantity of %d units (requested: %d)", product.Name, minQty, req.Quantity)
+	}
+
 	stock, err := s.invService.GetStock(ctx, req.ProductID)
 	if err != nil || stock.AvailableStock() < req.Quantity {
 		return nil, errors.New("requested quantity exceeds currently available stock")
@@ -112,6 +122,17 @@ func (s *cartService) UpdateItem(ctx context.Context, itemID string, quantity in
 		return nil, errors.New("cart item not found")
 	}
 
+	product, err := s.productRepo.GetByID(ctx, item.ProductID)
+	if err == nil && product != nil {
+		minQty := 1
+		if product.MinOrderQuantity > 1 {
+			minQty = product.MinOrderQuantity
+		}
+		if quantity < minQty {
+			return nil, fmt.Errorf("product %q requires a minimum order quantity of %d units", product.Name, minQty)
+		}
+	}
+
 	stock, err := s.invService.GetStock(ctx, item.ProductID)
 	if err != nil || stock.AvailableStock() < quantity {
 		return nil, errors.New("requested quantity exceeds available stock")
@@ -141,11 +162,17 @@ func (s *cartService) GetCartByID(ctx context.Context, cartID string) (*model.Ca
 func toCartResponse(cart *model.Cart) *dto.CartResponse {
 	var items []dto.CartItemResponse
 	var totalAmount float64
+	var originalTotal float64
 	totalItems := 0
+	now := time.Now()
 
 	for _, it := range cart.Items {
-		lineSubtotal := float64(it.Quantity) * it.Product.SellingPrice
-		totalAmount += lineSubtotal
+		effPrice, discAmt, discPct, isDiscActive := it.Product.EffectivePrice(now)
+		lineSubtotal := math.Round(float64(it.Quantity)*effPrice*100) / 100
+		lineOriginal := math.Round(float64(it.Quantity)*it.Product.SellingPrice*100) / 100
+
+		totalAmount = math.Round((totalAmount+lineSubtotal)*100) / 100
+		originalTotal = math.Round((originalTotal+lineOriginal)*100) / 100
 		totalItems += it.Quantity
 
 		imgURL := ""
@@ -158,24 +185,41 @@ func toCartResponse(cart *model.Cart) *dto.CartResponse {
 			available = it.Product.Stock.AvailableStock()
 		}
 
+		minOrderQty := 1
+		if it.Product.MinOrderQuantity > 1 {
+			minOrderQty = it.Product.MinOrderQuantity
+		}
+
 		items = append(items, dto.CartItemResponse{
-			ID:             it.ID,
-			ProductID:      it.ProductID,
-			ProductName:    it.Product.Name,
-			ProductSKU:     it.Product.SKU,
-			ProductImage:   imgURL,
-			UnitOfMeasure:  it.Product.UnitOfMeasure,
-			UnitPrice:      it.Product.SellingPrice,
-			Quantity:       it.Quantity,
-			Subtotal:       lineSubtotal,
-			AvailableStock: available,
+			ID:               it.ID,
+			ProductID:        it.ProductID,
+			ProductName:      it.Product.Name,
+			ProductSKU:       it.Product.SKU,
+			ProductImage:     imgURL,
+			UnitOfMeasure:    it.Product.UnitOfMeasure,
+			OriginalPrice:    it.Product.SellingPrice,
+			UnitPrice:        effPrice,
+			DiscountPercent:  discPct,
+			DiscountAmount:   discAmt,
+			IsDiscountActive: isDiscActive,
+			MinOrderQuantity: minOrderQty,
+			Quantity:         it.Quantity,
+			Subtotal:         lineSubtotal,
+			AvailableStock:   available,
 		})
 	}
 
+	totalSavings := math.Round((originalTotal-totalAmount)*100) / 100
+	if totalSavings < 0 {
+		totalSavings = 0
+	}
+
 	return &dto.CartResponse{
-		ID:          cart.ID,
-		Items:       items,
-		TotalItems:  totalItems,
-		TotalAmount: totalAmount,
+		ID:            cart.ID,
+		Items:         items,
+		TotalItems:    totalItems,
+		TotalAmount:   totalAmount,
+		OriginalTotal: originalTotal,
+		TotalSavings:  totalSavings,
 	}
 }

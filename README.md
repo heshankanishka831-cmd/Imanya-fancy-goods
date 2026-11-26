@@ -1,77 +1,78 @@
-# Imanya Fancy Goods - Import & Wholesale Distribution Management System
+# Imanya Fancy Goods — Import & Distribution Management System
 
-A production-grade, secure, web-based management system built specifically for **Imanya Fancy Goods** import and wholesale distribution operations.
-
-## Architecture & Technology Stack
-
-The solution is implemented as a **Modular Monolith** with clean domain separation:
-
-- **Backend:**
-  - **Go 1.27+** with the **Gin Web Framework** (RESTful JSON API)
-  - **GORM ORM** with native PostgreSQL driver
-  - **Casbin RBAC** for fine-grained authorization (`casbin_rule` database persistence)
-  - **JWT Authentication** (stateless HMAC-SHA256 bearer tokens)
-  - **Argon2id / Bcrypt** cryptographic password hashing
-  - **Uber-Zap** structured JSON logging with correlation `X-Request-ID`
-  - **go-playground/validator/v10** for API boundary validation
-  - **golang-migrate** compatible SQL versioned migrations
-
-- **Frontend:**
-  - **React 18** with **TypeScript** and **Vite**
-  - **Tailwind CSS** for modern, responsive UI styling
-  - **React Router v6** with role-guarded protected routes
-  - **Centralized Axios API Client** with automatic token injection and error interceptors
-  - **Lucide React** icons
-
-- **Database & System of Record:**
-  - **PostgreSQL 18.7** (database: `wholesale_management`)
-  - Concurrency-safe inventory ledger with pessimistic row locking (`SELECT ... FOR UPDATE`)
-  - PostgreSQL is the sole system of record; WhatsApp Click-to-Chat is an external client communication channel.
+A full-stack, modular web application for **Imanya Fancy Goods** import, wholesale/retail product distribution, customer shopping (authenticated & guest checkout), and business administration.
 
 ---
 
-## Workspace Directory Structure
+## Architecture & Technology Stack
 
-```
-wholesale-management/
+Implemented as a **Modular Monolith** backend with domain separation and a **Feature-Based React SPA** frontend:
+
+- **Backend (`backend/`)**
+  - **Go 1.27.4** with **Gin** (`github.com/gin-gonic/gin v1.12.0`)
+  - **GORM** (`gorm.io/gorm`) with **PostgreSQL (`pgx/v5`)** and prepared statement caching
+  - **Casbin RBAC** (`casbin/v3` + `gorm-adapter/v3`) for role-based admin authorization
+  - **JWT Authentication** (HS256 bearer tokens) & **bcrypt** password hashing
+  - **Email OTP Verification** via Gmail SMTP (`smtp.gmail.com:587` STARTTLS)
+  - **WhatsApp Integration**: Prefilled `wa.me` click-to-chat URLs + optional WhatsApp Business Cloud API notifications
+  - **Local Disk Image Storage** (`/uploads`) with MIME sniffing, image decode validation, and `X-Content-Type-Options: nosniff`
+  - **Uber-Zap** structured logging with `X-Request-ID` correlation
+
+- **Frontend (`frontend/`)**
+  - **React 18** + **TypeScript 5.7** + **Vite 6** (dev server on port `5173`, proxying `/api` and `/uploads` to `http://127.0.0.1:8081`)
+  - **Tailwind CSS 3.4** & **Lucide React** icons
+  - **React Router v6** with lazy-loaded routes and role-guarded `ProtectedRoute`
+  - **Axios** client (`frontend/src/services/api.ts`) with JWT injection, `X-Session-ID` guest cart tracking, and 15s request timeout
+
+- **Database**
+  - **PostgreSQL 18.7** (database: `wholesale_management`)
+  - Versioned SQL migrations (`000001` through `000011`) in `backend/migrations/`
+  - Concurrency-safe inventory updates using pessimistic row locking (`SELECT ... FOR UPDATE`)
+
+---
+
+## Workspace Structure
+
+```text
+New project/
 ├── backend/
-│   ├── cmd/api/main.go                 # Server entry point & graceful shutdown
+│   ├── cmd/api/main.go                 # API server entry point
+│   ├── cmd/migrate/main.go             # Database migration runner
 │   ├── internal/
-│   │   ├── app/                        # Bootstrapping, router & dependency injection
-│   │   ├── config/                     # Environment variable loader
-│   │   ├── platform/                   # Shared infrastructure: database, logger, middleware, storage
-│   │   ├── audit/                      # Structured audit logging service & handler
-│   │   ├── auth/                       # Login handler, password verification & JWT generator
-│   │   ├── users/                      # User management & role assignment
-│   │   ├── catalog/                    # Products, categories, product images, public catalog
+│   │   ├── app/                        # Dependency wiring & Gin router
+│   │   ├── audit/                      # Audit log tracking
+│   │   ├── auth/                       # Login, JWT & OTP-gated registration
+│   │   ├── carts/                      # Session & customer shopping carts
+│   │   ├── catalog/                    # Categories, products, images, discounts, MOQ
+│   │   ├── config/                     # Multi-path .env configuration loader
+│   │   ├── customers/                  # Customer profiles, addresses, profile photos, admin directory
 │   │   ├── inventory/                  # Stock balances, row-locking & movement ledger
-│   │   ├── suppliers/                  # Supplier directory & contact management
-│   │   ├── procurement/                # Purchase orders, PO items & goods receiving
-│   │   ├── customers/                  # Customer profiles & order tracking
-│   │   ├── carts/                      # Server-side shopping cart with stock validation
-│   │   ├── orders/                     # Atomic checkout transaction & status state machine
-│   │   ├── whatsapp/                   # WhatsApp click-to-chat URL builder
-│   │   └── reports/                    # Executive KPI dashboard & operational metrics
-│   ├── migrations/                     # Versioned SQL migrations (up/down)
-│   ├── .env.example                    # Sample environment variables
-│   ├── .env                            # Active environment configuration
-│   ├── go.mod
-│   └── go.sum
+│   │   ├── loyalty/                    # Membership tiers (BRONZE–PLATINUM) & thresholds
+│   │   ├── orders/                     # Authenticated & Guest checkout, tracking & status workflow
+│   │   ├── otp/                        # SHA-256 hashed email OTP verification
+│   │   ├── platform/                   # Postgres, Zap logger, middleware, SMTP mailer, disk storage
+│   │   ├── procurement/                # Purchase orders & goods receiving
+│   │   ├── reports/                    # Admin dashboard KPIs & sales reports
+│   │   ├── suppliers/                  # Supplier directory
+│   │   ├── users/                      # Staff accounts & role management
+│   │   └── whatsapp/                   # WhatsApp order message & Cloud API sender
+│   ├── migrations/                     # SQL migrations (000001..000011)
+│   ├── uploads/                        # Uploaded product & profile images
+│   ├── .env.example                    # Environment configuration template
+│   └── go.mod
 ├── frontend/
 │   ├── src/
-│   │   ├── app/App.tsx                 # Root router & context providers
-│   │   ├── components/                 # UI primitives (Button, Modal, Input, Badge, Table, etc.)
-│   │   ├── features/                   # Feature modules: auth, storefront, cart, catalog, inventory, etc.
-│   │   ├── layouts/                    # AdminLayout, StorefrontLayout, AuthLayout
-│   │   ├── services/api.ts             # Centralized Axios client
-│   │   ├── types/index.ts              # TypeScript domain interfaces
-│   │   └── utils/                      # Currency formatters & WhatsApp link generator
+│   │   ├── app/App.tsx                 # Routes & context providers
+│   │   ├── components/                 # Shared UI (Avatar, Modal, Badge, Navbar, Sidebar, etc.)
+│   │   ├── features/                   # Auth, Storefront, Cart, Guest Checkout, Orders, Admin modules
+│   │   ├── layouts/                    # StorefrontLayout, AdminLayout, AuthLayout
+│   │   ├── services/                   # Axios instance & typed API endpoints
+│   │   ├── types/                      # TypeScript domain models
+│   │   └── utils/                      # Formatters, WhatsApp helper, BroadcastChannel catalog sync
 │   ├── package.json
-│   ├── tailwind.config.js
 │   └── vite.config.ts
-├── PROJECT_SPECIFICATION.md            # Primary requirements baseline document
-├── README.md                           # This setup and execution guide
-└── .gitignore
+├── docs/                               # Architecture, workflows, DB, API, security & test reports
+└── README.md
 ```
 
 ---
@@ -79,99 +80,72 @@ wholesale-management/
 ## Quick Start Guide (Windows PowerShell)
 
 ### 1. Prerequisites
-- **Go:** 1.27+ installed
-- **Node.js:** v20+ or v22+ with `npm` installed
-- **PostgreSQL:** 18+ running on `localhost:5432` with database `wholesale_management` created.
+- **Go**: `1.27+`
+- **Node.js**: `v20+` with `npm`
+- **PostgreSQL**: `18+` running on `localhost:5432` with database `wholesale_management` created
 
-### 2. Database Migration & Seed Data
-The database migrations are located in `backend/migrations/`:
-- `000001_init_schema.up.sql` creates all normalized tables, foreign keys, indexes, and constraints.
-- `000002_seed_initial_data.up.sql` seeds default roles, categories, products, stock levels, and the Super Administrator account.
+### 2. Configure Environment
+Copy `backend/.env.example` to `backend/.env` and fill in your PostgreSQL, JWT, WhatsApp, and Gmail SMTP (`SMTP_EMAIL` + Google App Password `SMTP_PASSWORD`) settings.
 
-You can apply them using `psql` or let the backend run them automatically on startup:
+### 3. Apply Database Migrations
 ```powershell
-# Using psql on Windows (optional manual migration):
-psql -U postgres -d wholesale_management -f "C:\Users\Heshan - Work\Desktop\New project\backend\migrations\000001_init_schema.up.sql"
-psql -U postgres -d wholesale_management -f "C:\Users\Heshan - Work\Desktop\New project\backend\migrations\000002_seed_initial_data.up.sql"
+cd "C:\Users\Heshan - Work\Desktop\New project\backend"
+go run cmd/migrate/main.go
 ```
+*(The API server also runs migrations automatically on startup.)*
 
-### 3. Running the Backend Server
+### 4. Start the Backend API (`:8081`)
 ```powershell
 cd "C:\Users\Heshan - Work\Desktop\New project\backend"
 go run cmd/api/main.go
 ```
-The backend API server will listen on `http://localhost:8080`.  
-Health check endpoint: `http://localhost:8080/api/v1/health`
+- API Base URL: `http://127.0.0.1:8081/api/v1`
+- Health Check: `http://127.0.0.1:8081/api/v1/health`
 
-### 4. Running the Frontend Portal
+### 5. Start the Frontend (`:5173`)
 In a second PowerShell window:
 ```powershell
 cd "C:\Users\Heshan - Work\Desktop\New project\frontend"
 npm run dev
 ```
-The customer storefront and admin portal will be available at:  
-👉 **http://localhost:5173**
+- Storefront & Admin Portal: **http://localhost:5173**
 
 ---
 
 ## Default Seed Credentials
 
-| Role | Username | Email Address | Password |
+| Role | Username | Email | Password |
 |---|---|---|---|
-| **Super Administrator** | `superadmin` | `admin@wholesale.local` | `Admin@123456` |
-
-*(You can also use the "Fill Demo Credentials" helper on the `/login` page).*
+| **Super Administrator** | `superadmin` | `admin@imanya.local` | `Admin@123456` |
 
 ---
 
-## Key Functional Highlights
+## Key Features
 
-1. **Customer Storefront (`/`):**
-   - Public product browsing with real-time stock indicator (`In Stock` vs `Out of Stock`).
-   - Category filtering and SKU search.
-   - Server-side shopping cart with stock quantity revalidation.
-   - One-click checkout generating a recorded order in PostgreSQL and an optional **WhatsApp Click-to-Chat** confirmation message.
-
-2. **Admin Operations Dashboard (`/admin/dashboard`):**
-   - Real-time KPI summary (Active Products, Low Stock Watchlist, Total Order Volume, Pending Orders).
-   - Direct access to order management and stock reconciliation.
-
-3. **Catalogue & Pricing Management (`/admin/products` & `/admin/categories`):**
-   - Product CRUD with SKU uniqueness checks.
-   - Cost prices and margin calculations are strictly confidential and stripped from public responses.
-   - Safe image uploading with MIME byte sniffing (JPEG, PNG, WEBP).
-
-4. **Procurement & Goods Receiving (`/admin/procurement`):**
-   - Purchase order creation with supplier line items and agreed purchase costs.
-   - Goods receipt logging with actual received quantities (supports partial receiving).
-   - Inward goods automatically increase physical stock and append an immutable `RECEIVING` record to the stock ledger.
-
-5. **Inventory Balances & Movement Ledger (`/admin/inventory`):**
-   - Real-time stock levels with allocated stock tracking.
-   - Pessimistic locking (`SELECT ... FOR UPDATE`) prevents concurrent overselling during simultaneous checkout attempts.
-   - Full historical audit ledger of all movements (`RECEIVING`, `ORDER_ALLOCATION`, `ORDER_DEDUCTION`, `ADJUSTMENT`, `CANCELLATION_RESTOCK`).
-
-6. **Order Fulfillment & WhatsApp Click-to-Chat (`/admin/orders`):**
-   - Atomic checkout snapshotting item prices and product details at purchase time.
-   - Documented status workflow: `PENDING` &rarr; `CONFIRMED` &rarr; `PROCESSING` &rarr; `COMPLETED`.
-   - Cancelling an order automatically restocks allocated inventory within a database transaction.
-   - Outbound WhatsApp Click-to-Chat link with readable order summary and line totals.
-
-7. **System Traceability & Audit Logs (`/admin/audit`):**
-   - Captures actor ID, action type, entity name, entity ID, client IP address, and before/after JSON state diffs for critical mutations.
+1. **Storefront & Guest Shopping (`/`, `/shop`, `/categories`)**: Product browsing, search, category/price/discount filters, quick view, wishlist (`localStorage` synced via `BroadcastChannel`), and persistent session cart enforcing MOQ and live stock.
+2. **Guest Checkout & Order Tracking (`/checkout`, `/order-confirmation/:orderNumber`, `/track-order`)**: Guests can place orders without registering or logging in; orders use idempotency keys, server-side pricing/discounts, nullable `customer_id`, and token/phone-verified tracking.
+3. **Customer Portal (`/register`, `/login`, `/profile`, `/orders`, `/membership`)**: Gmail SMTP OTP registration & email change, structured residential/delivery addresses, circular profile photo upload/replacement/removal (JPG/PNG/WebP up to 5 MB), order history, and automatic loyalty tier upgrades (`BRONZE`, `SILVER`, `GOLD`, `PLATINUM`).
+4. **Admin Operations (`/admin/*`)**: Live KPI dashboard, product & time-windowed discount management, inventory adjustments & movement ledger, supplier & PO goods receiving, centralized registered/guest order processing, customer directory, sales/inventory/procurement reports, staff RBAC, and audit logs.
 
 ---
 
-## Testing & Verification
+## Testing & Build
 
-Run the backend unit test suite:
 ```powershell
+# Backend tests
 cd "C:\Users\Heshan - Work\Desktop\New project\backend"
-go test -v ./...
-```
+go test -count=1 ./...
 
-Run the frontend TypeScript verification and production build:
-```powershell
+# Frontend type-check & production build
 cd "C:\Users\Heshan - Work\Desktop\New project\frontend"
 npm run build
 ```
+
+---
+
+## Additional Documentation
+
+Full technical documentation, Mermaid workflow diagrams, database ER schema, API reference, security audit, and test reports are available in `docs/`:
+- [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | [PROJECT_ARCHITECTURE.md](docs/PROJECT_ARCHITECTURE.md) | [COMPLETE_SYSTEM_WORKFLOW.md](docs/COMPLETE_SYSTEM_WORKFLOW.md)
+- [DATABASE_DOCUMENTATION.md](docs/DATABASE_DOCUMENTATION.md) | [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) | [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)
+- [FINAL_IMPLEMENTATION_STATUS.md](docs/FINAL_IMPLEMENTATION_STATUS.md) | [FUNCTIONAL_TESTING_REPORT.md](docs/FUNCTIONAL_TESTING_REPORT.md) | [RECOMMENDED_DEVELOPMENT_ROADMAP.md](docs/RECOMMENDED_DEVELOPMENT_ROADMAP.md)

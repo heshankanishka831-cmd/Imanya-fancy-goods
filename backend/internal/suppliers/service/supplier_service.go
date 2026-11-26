@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/suppliers/dto"
-	"wholesale-management/internal/suppliers/model"
-	"wholesale-management/internal/suppliers/repository"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/suppliers/dto"
+	"distribution-management/internal/suppliers/model"
+	"distribution-management/internal/suppliers/repository"
 )
 
 type SupplierService interface {

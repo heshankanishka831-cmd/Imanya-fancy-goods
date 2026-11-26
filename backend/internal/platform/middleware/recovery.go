@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"wholesale-management/internal/platform/logger"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/platform/logger"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 )

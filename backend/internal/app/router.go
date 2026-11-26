@@ -2,22 +2,24 @@ package app
 
 import (
 	"net/http"
+	"time"
 
-	"wholesale-management/internal/config"
-	"wholesale-management/internal/platform/middleware"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/config"
+	"distribution-management/internal/platform/middleware"
+	"distribution-management/internal/platform/response"
 
-	auditHandler "wholesale-management/internal/audit/handler"
-	authHandler "wholesale-management/internal/auth/handler"
-	cartHandler "wholesale-management/internal/carts/handler"
-	catalogHandler "wholesale-management/internal/catalog/handler"
-	customerHandler "wholesale-management/internal/customers/handler"
-	invHandler "wholesale-management/internal/inventory/handler"
-	orderHandler "wholesale-management/internal/orders/handler"
-	procurementHandler "wholesale-management/internal/procurement/handler"
-	reportHandler "wholesale-management/internal/reports/handler"
-	supplierHandler "wholesale-management/internal/suppliers/handler"
-	userHandler "wholesale-management/internal/users/handler"
+	auditHandler "distribution-management/internal/audit/handler"
+	authHandler "distribution-management/internal/auth/handler"
+	cartHandler "distribution-management/internal/carts/handler"
+	catalogHandler "distribution-management/internal/catalog/handler"
+	customerHandler "distribution-management/internal/customers/handler"
+	invHandler "distribution-management/internal/inventory/handler"
+	loyaltyHandler "distribution-management/internal/loyalty/handler"
+	orderHandler "distribution-management/internal/orders/handler"
+	procurementHandler "distribution-management/internal/procurement/handler"
+	reportHandler "distribution-management/internal/reports/handler"
+	supplierHandler "distribution-management/internal/suppliers/handler"
+	userHandler "distribution-management/internal/users/handler"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,6 +40,7 @@ func SetupRouter(
 	oHdlr *orderHandler.OrderHandler,
 	repHdlr *reportHandler.ReportHandler,
 	aHdlr *auditHandler.AuditHandler,
+	loyaltyHdlr *loyaltyHandler.LoyaltyHandler,
 ) *gin.Engine {
 	if cfg.ServerEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -50,8 +53,13 @@ func SetupRouter(
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.CORSMiddleware(cfg.CORSAllowedOrigins))
 
-	// Static uploads directory
-	r.Static("/uploads", cfg.UploadDir)
+	// Static uploads directory with nosniff security header
+	uploadsGroup := r.Group("/uploads")
+	uploadsGroup.Use(func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Next()
+	})
+	uploadsGroup.Static("/", cfg.UploadDir)
 
 	// API v1 Group
 	v1 := r.Group("/api/v1")
@@ -65,13 +73,16 @@ func SetupRouter(
 			})
 		})
 
-		// Authentication
+		// Authentication & Verified Registration OTP Flows
 		v1.POST("/auth/login", authHdlr.Login)
 		v1.POST("/auth/register", authHdlr.RegisterCustomer)
 		v1.POST("/auth/customer/register", authHdlr.RegisterCustomer)
+		v1.POST("/auth/customer/register/initiate", middleware.RateLimitMiddleware(10, 10*time.Minute, "reg-init"), authHdlr.InitiateRegistration)
+		v1.POST("/auth/customer/register/verify-otp", middleware.RateLimitMiddleware(15, 10*time.Minute, "reg-verify"), authHdlr.VerifyRegistrationOTP)
+		v1.POST("/auth/customer/register/resend-otp", middleware.RateLimitMiddleware(8, 10*time.Minute, "reg-resend"), authHdlr.ResendRegistrationOTP)
 
-		// Public Storefront (No Auth Required)
-		pub := v1.Group("/public")
+		// Public Storefront (With Optional Customer Auth)
+		pub := v1.Group("/public", middleware.OptionalAuthMiddleware(cfg.JWTSecret))
 		{
 			pub.GET("/categories", pubCatHdlr.ListCategories)
 			pub.GET("/products", pubCatHdlr.ListProducts)
@@ -85,13 +96,33 @@ func SetupRouter(
 			pub.POST("/checkout", oHdlr.Checkout)
 			pub.GET("/orders/:id", oHdlr.GetOrder)
 			pub.GET("/orders/:id/whatsapp", oHdlr.GetWhatsAppLink)
+			pub.GET("/membership/tiers", loyaltyHdlr.GetSettings)
 		}
 
-		// Authenticated Customer Endpoints
-		cust := v1.Group("/customer", middleware.AuthMiddleware(cfg.JWTSecret))
+		// Guest Checkout & Secure Order Lookup (no authentication required, rate-limited)
+		guest := v1.Group("/guest")
+		{
+			guest.POST("/orders", middleware.RateLimitMiddleware(10, 10*time.Minute, "guest-checkout"), oHdlr.GuestCheckout)
+			guest.GET("/orders/:orderNumber", middleware.RateLimitMiddleware(30, 10*time.Minute, "guest-order-lookup"), oHdlr.GetGuestOrder)
+		}
+
+		// WhatsApp Cloud API Webhook (active only when WHATSAPP_WEBHOOK_VERIFY_TOKEN is configured)
+		oHdlr.SetWebhookVerifyToken(cfg.WhatsAppWebhookVerifyToken)
+		v1.GET("/webhooks/whatsapp", oHdlr.WhatsAppWebhookVerify)
+		v1.POST("/webhooks/whatsapp", oHdlr.WhatsAppWebhookReceive)
+
+		// Authenticated Customer Endpoints (strictly Customer role + ownership via authenticated identity)
+		cust := v1.Group("/customer", middleware.AuthMiddleware(cfg.JWTSecret), middleware.RequireExactRole("Customer"))
 		{
 			cust.GET("/profile", custHdlr.GetMyProfile)
 			cust.PUT("/profile", custHdlr.UpdateMyProfile)
+			cust.POST("/profile/photo", custHdlr.UploadMyProfilePhoto)
+			cust.DELETE("/profile/photo", custHdlr.RemoveMyProfilePhoto)
+			cust.POST("/profile/email/initiate", middleware.RateLimitMiddleware(8, 10*time.Minute, "email-init"), custHdlr.InitiateEmailChange)
+			cust.POST("/profile/email/verify", middleware.RateLimitMiddleware(15, 10*time.Minute, "email-verify"), custHdlr.VerifyEmailChange)
+			cust.POST("/profile/email/resend", middleware.RateLimitMiddleware(8, 10*time.Minute, "email-resend"), custHdlr.ResendEmailChangeOTP)
+			cust.POST("/change-password", custHdlr.ChangePassword)
+			cust.GET("/membership", loyaltyHdlr.GetMyMembership)
 			cust.GET("/orders", oHdlr.ListOrders)
 			cust.GET("/orders/:id", oHdlr.GetOrder)
 			cust.GET("/orders/:id/whatsapp", oHdlr.GetWhatsAppLink)
@@ -146,11 +177,23 @@ func SetupRouter(
 			admin.GET("/orders", oHdlr.ListOrders)
 			admin.GET("/orders/:id", oHdlr.GetOrder)
 			admin.PUT("/orders/:id/status", oHdlr.UpdateStatus)
+			admin.PUT("/orders/:id/payment", oHdlr.UpdatePaymentStatus)
 			admin.GET("/orders/:id/whatsapp", oHdlr.GetWhatsAppLink)
+			admin.POST("/orders/:id/whatsapp/retry", oHdlr.RetryWhatsAppNotification)
 
 			// Customers
 			admin.GET("/customers", custHdlr.List)
 			admin.GET("/customers/:id", custHdlr.GetCustomerByID)
+			admin.PUT("/customers/:id", custHdlr.AdminUpdateCustomer)
+			admin.PUT("/customers/:id/status", custHdlr.UpdateCustomerStatus)
+			admin.POST("/customers/:id/reset-password", custHdlr.AdminResetPassword)
+
+			// Loyalty & Customer Membership
+			admin.GET("/membership/settings", loyaltyHdlr.GetSettings)
+			admin.PUT("/membership/settings", loyaltyHdlr.UpdateSettings)
+			admin.GET("/membership/stats", loyaltyHdlr.GetStats)
+			admin.GET("/membership/customers", loyaltyHdlr.ListCustomers)
+			admin.POST("/membership/recalculate/:id", loyaltyHdlr.RecalculateCustomer)
 
 			// Reporting Dashboard & Sales Reports
 			admin.GET("/reports/dashboard", repHdlr.GetDashboard)
@@ -165,5 +208,5 @@ func SetupRouter(
 }
 
 func timeNow() string {
-	return "2026-11-19T09:00:00Z"
+	return time.Now().UTC().Format(time.RFC3339)
 }

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"wholesale-management/internal/config"
-	"wholesale-management/internal/platform/logger"
+	"distribution-management/internal/config"
+	"distribution-management/internal/platform/logger"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -25,12 +25,9 @@ type DB struct {
 
 func Connect(cfg *config.Config) (*DB, error) {
 	logMode := gormlogger.Warn
-	if cfg.ServerEnv == "development" {
-		logMode = gormlogger.Info
-	}
-
 	gormConfig := &gorm.Config{
-		Logger: gormlogger.Default.LogMode(logMode),
+		Logger:      gormlogger.Default.LogMode(logMode),
+		PrepareStmt: true,
 	}
 
 	db, err := gorm.Open(postgres.Open(cfg.GetDSN()), gormConfig)
@@ -44,9 +41,10 @@ func Connect(cfg *config.Config) (*DB, error) {
 	}
 
 	// Connection Pool Tuning
-	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxIdleConns(15)
 	sqlDB.SetMaxOpenConns(50)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
 
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -56,13 +54,24 @@ func Connect(cfg *config.Config) (*DB, error) {
 		return nil, fmt.Errorf("database ping check failed: %w", err)
 	}
 
-	logger.Log.Info("Successfully established connection to PostgreSQL database")
+	if logger.Log != nil {
+		logger.Log.Info("Successfully established connection to PostgreSQL database")
+	}
 
 	return &DB{DB: db, SqlDB: sqlDB}, nil
 }
 
 // RunMigrations applies .up.sql files sequentially from migrationsPath
 func (d *DB) RunMigrations(migrationsPath string) error {
+	// Fallback to backend/migrations if relative path is from repository root
+	if _, err := os.Stat(migrationsPath); os.IsNotExist(err) {
+		if _, altErr := os.Stat(filepath.Join("backend", migrationsPath)); altErr == nil {
+			migrationsPath = filepath.Join("backend", migrationsPath)
+		} else if _, altErr2 := os.Stat("./backend/migrations"); altErr2 == nil {
+			migrationsPath = "./backend/migrations"
+		}
+	}
+
 	logger.Log.Infof("Executing SQL migrations from directory: %s", migrationsPath)
 
 	entries, err := os.ReadDir(migrationsPath)
@@ -86,7 +95,7 @@ func (d *DB) RunMigrations(migrationsPath string) error {
 		}
 
 		logger.Log.Infof("Applying migration: %s", file)
-		if err := d.Exec(string(content)).Error; err != nil {
+		if _, err := d.SqlDB.Exec(string(content)); err != nil {
 			return fmt.Errorf("migration %s failed to execute: %w", file, err)
 		}
 	}

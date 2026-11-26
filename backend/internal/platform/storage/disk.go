@@ -1,8 +1,12 @@
 package storage
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -59,7 +63,16 @@ func (s *DiskStorage) SaveImage(fileHeader *multipart.FileHeader) (string, error
 		return "", errors.New("unsupported file format. Allowed formats: JPEG, PNG, WEBP")
 	}
 
-	// Reset seek pointer to beginning
+	// Reset seek pointer to beginning and verify actual image content (not just magic bytes/extension)
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("failed to reset file pointer: %w", err)
+	}
+
+	if err := validateDecodedImage(src, contentType); err != nil {
+		return "", err
+	}
+
+	// Reset seek pointer to beginning for copying
 	if _, err := src.Seek(0, io.SeekStart); err != nil {
 		return "", fmt.Errorf("failed to reset file pointer: %w", err)
 	}
@@ -78,4 +91,62 @@ func (s *DiskStorage) SaveImage(fileHeader *multipart.FileHeader) (string, error
 	}
 
 	return fmt.Sprintf("/uploads/%s", strings.ReplaceAll(filename, "\\", "/")), nil
+}
+
+// DeleteImage safely deletes a previously uploaded image given its public /uploads/... URL.
+// Prevents path traversal by ensuring the resolved target stays strictly inside UploadDir.
+func (s *DiskStorage) DeleteImage(publicURL string) error {
+	trimmed := strings.TrimSpace(publicURL)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "/uploads/") {
+		return nil
+	}
+	rel := strings.TrimPrefix(trimmed, "/uploads/")
+	if rel == "" || strings.Contains(rel, "..") || strings.ContainsAny(rel, "/\\") {
+		return errors.New("invalid upload path")
+	}
+
+	absDir, err := filepath.Abs(s.UploadDir)
+	if err != nil {
+		return err
+	}
+	target := filepath.Join(absDir, rel)
+	if !strings.HasPrefix(target, absDir+string(os.PathSeparator)) {
+		return errors.New("path traversal blocked")
+	}
+
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func validateDecodedImage(r io.Reader, contentType string) error {
+	switch contentType {
+	case "image/jpeg", "image/png":
+		cfg, format, err := image.DecodeConfig(r)
+		if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+			return errors.New("invalid or corrupted image file")
+		}
+		if (contentType == "image/jpeg" && format != "jpeg") || (contentType == "image/png" && format != "png") {
+			return errors.New("image content does not match declared format")
+		}
+		return nil
+	case "image/webp":
+		header := make([]byte, 16)
+		n, err := io.ReadFull(r, header)
+		if err != nil || n < 16 {
+			return errors.New("invalid or corrupted WebP image")
+		}
+		// RIFF <4-byte size> WEBP VP8?/VP8L/VP8X
+		if !bytes.Equal(header[0:4], []byte("RIFF")) || !bytes.Equal(header[8:12], []byte("WEBP")) {
+			return errors.New("invalid or corrupted WebP image")
+		}
+		chunk := string(header[12:16])
+		if chunk != "VP8 " && chunk != "VP8L" && chunk != "VP8X" {
+			return errors.New("unsupported or corrupted WebP bitstream")
+		}
+		return nil
+	default:
+		return errors.New("unsupported image format")
+	}
 }

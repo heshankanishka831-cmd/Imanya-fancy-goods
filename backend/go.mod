@@ -1,4 +1,4 @@
-module wholesale-management
+module distribution-management
 
 go 1.27.4
 

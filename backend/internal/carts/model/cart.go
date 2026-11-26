@@ -2,7 +2,7 @@ package model
 
 import (
 	"time"
-	catalogModel "wholesale-management/internal/catalog/model"
+	catalogModel "distribution-management/internal/catalog/model"
 )
 
 type Cart struct {

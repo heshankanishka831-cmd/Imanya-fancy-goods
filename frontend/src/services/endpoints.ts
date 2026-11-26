@@ -13,27 +13,75 @@ import {
   Cart,
   Order,
   Customer,
+  UpdateCustomerProfilePayload,
+  AdminUpdateCustomerPayload,
+  ChangePasswordPayload,
+  CustomerFilterParams,
   DashboardMetrics,
   AuditLog,
   SalesReport,
+  CustomerMembership,
+  LoyaltySettingsResponse,
+  UpdateThresholdsRequest,
+  MembershipStats,
+  MembershipCustomerItem,
+  OTPChallenge,
+  RegistrationVerifiedResponse,
 } from '../types';
+
+export interface RegisterInitiatePayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  confirm_password?: string;
+  phone: string;
+  residential_address: string;
+  business_name?: string;
+  delivery_address?: string;
+  address?: string;
+  delivery_same_as_residential?: boolean;
+  del_recipient_name?: string;
+  del_phone?: string;
+  del_house_no?: string;
+  del_street?: string;
+  del_city?: string;
+  del_district?: string;
+  del_postal_code?: string;
+  terms_accepted?: boolean;
+}
 
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await api.post<ApiResponse<{ token: string; user: User; business_name?: string; phone?: string; address?: string }>>('/auth/login', { email, password });
+    const res = await api.post<ApiResponse<{
+      token: string;
+      user: User;
+      business_name?: string;
+      phone?: string;
+      residential_address?: string;
+      delivery_address?: string;
+      address?: string;
+      membership_tier?: string;
+    }>>('/auth/login', { email, password });
     return res.data;
   },
-  register: async (payload: {
-    first_name: string;
-    last_name: string;
-    username: string;
+  initiateRegister: async (payload: RegisterInitiatePayload) => {
+    const res = await api.post<ApiResponse<OTPChallenge>>('/auth/customer/register/initiate', payload);
+    return res.data;
+  },
+  verifyRegistrationOTP: async (payload: {
+    verification_id: string;
     email: string;
-    password: string;
-    phone: string;
-    business_name?: string;
-    address?: string;
+    otp: string;
   }) => {
-    const res = await api.post<ApiResponse<{ token: string; user: User; business_name?: string; phone?: string; address?: string }>>('/auth/customer/register', payload);
+    const res = await api.post<ApiResponse<RegistrationVerifiedResponse>>('/auth/customer/register/verify-otp', payload);
+    return res.data;
+  },
+  resendRegistrationOTP: async (payload: {
+    verification_id: string;
+    recipient_name?: string;
+  }) => {
+    const res = await api.post<ApiResponse<OTPChallenge>>('/auth/customer/register/resend-otp', payload);
     return res.data;
   },
 };
@@ -83,6 +131,31 @@ export const publicApi = {
   },
   getWhatsAppLink: async (id: string) => {
     const res = await api.get<ApiResponse<{ whatsapp_url: string }>>(`/public/orders/${id}/whatsapp`);
+    return res.data;
+  },
+};
+
+export interface GuestCheckoutPayload {
+  first_name: string;
+  last_name: string;
+  whatsapp_number: string;
+  email?: string;
+  delivery_address: string;
+  city: string;
+  province: string;
+  postal_code?: string;
+  delivery_instructions?: string;
+  idempotency_key?: string;
+  items?: { product_id: string; quantity: number }[];
+}
+
+export const guestApi = {
+  createOrder: async (payload: GuestCheckoutPayload) => {
+    const res = await api.post<ApiResponse<Order>>('/guest/orders', payload);
+    return res.data;
+  },
+  getOrder: async (orderNumber: string, params: { token?: string; phone?: string }) => {
+    const res = await api.get<ApiResponse<Order>>(`/guest/orders/${encodeURIComponent(orderNumber)}`, { params });
     return res.data;
   },
 };
@@ -202,7 +275,7 @@ export const adminApi = {
   },
 
   // Orders
-  getOrders: async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
+  getOrders: async (params?: { customer_id?: string; customer_type?: 'guest' | 'registered' | ''; status?: string; payment_status?: string; search?: string; page?: number; limit?: number }) => {
     const res = await api.get<ApiResponse<Order[]>>('/orders', { params });
     return res.data;
   },
@@ -214,10 +287,34 @@ export const adminApi = {
     const res = await api.put<ApiResponse<Order>>(`/orders/${id}/status`, { status, notes });
     return res.data;
   },
+  updateOrderPayment: async (id: string, payment_status: string, notes?: string) => {
+    const res = await api.put<ApiResponse<Order>>(`/orders/${id}/payment`, { payment_status, notes });
+    return res.data;
+  },
+  retryOrderWhatsApp: async (id: string) => {
+    const res = await api.post<ApiResponse<Order>>(`/orders/${id}/whatsapp/retry`);
+    return res.data;
+  },
 
   // Customers
-  getCustomers: async (params?: { search?: string; page?: number; limit?: number }) => {
+  getCustomers: async (params?: CustomerFilterParams) => {
     const res = await api.get<ApiResponse<Customer[]>>('/customers', { params });
+    return res.data;
+  },
+  getCustomer: async (id: string) => {
+    const res = await api.get<ApiResponse<Customer>>(`/customers/${id}`);
+    return res.data;
+  },
+  updateCustomer: async (id: string, data: AdminUpdateCustomerPayload) => {
+    const res = await api.put<ApiResponse<Customer>>(`/customers/${id}`, data);
+    return res.data;
+  },
+  updateCustomerStatus: async (id: string, isActive: boolean) => {
+    const res = await api.put<ApiResponse<Customer>>(`/customers/${id}/status`, { is_active: isActive });
+    return res.data;
+  },
+  resetCustomerPassword: async (id: string, newPassword: string) => {
+    const res = await api.post<ApiResponse<{ message: string }>>(`/customers/${id}/reset-password`, { new_password: newPassword });
     return res.data;
   },
 
@@ -250,6 +347,35 @@ export const adminApi = {
     const res = await api.get<ApiResponse<SalesReport>>('/reports/sales', { params: { period } });
     return res.data;
   },
+
+  // Loyalty & Customer Membership
+  getMembershipStats: async () => {
+    const res = await api.get<ApiResponse<MembershipStats>>('/membership/stats');
+    return res.data;
+  },
+  getMembershipSettings: async () => {
+    const res = await api.get<ApiResponse<LoyaltySettingsResponse>>('/membership/settings');
+    return res.data;
+  },
+  updateMembershipSettings: async (data: UpdateThresholdsRequest) => {
+    const res = await api.put<ApiResponse<LoyaltySettingsResponse>>('/membership/settings', data);
+    return res.data;
+  },
+  getMembershipCustomers: async (params?: {
+    tier?: string;
+    search?: string;
+    sort_by?: string;
+    order?: 'ASC' | 'DESC';
+    page?: number;
+    limit?: number;
+  }) => {
+    const res = await api.get<ApiResponse<MembershipCustomerItem[]>>('/membership/customers', { params });
+    return res.data;
+  },
+  recalculateCustomerMembership: async (customerId: string) => {
+    const res = await api.post<ApiResponse<CustomerMembership>>(`/membership/recalculate/${customerId}`);
+    return res.data;
+  },
 };
 
 export const customerApi = {
@@ -257,8 +383,54 @@ export const customerApi = {
     const res = await api.get<ApiResponse<Customer>>('/customer/profile');
     return res.data;
   },
-  updateProfile: async (data: { business_name?: string; phone?: string; delivery_address?: string }) => {
+  getMembership: async () => {
+    const res = await api.get<ApiResponse<CustomerMembership>>('/customer/membership');
+    return res.data;
+  },
+  updateProfile: async (data: UpdateCustomerProfilePayload) => {
     const res = await api.put<ApiResponse<Customer>>('/customer/profile', data);
+    return res.data;
+  },
+  uploadProfilePhoto: async (file: File, onProgress?: (percent: number) => void) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    const res = await api.post<ApiResponse<Customer>>('/customer/profile/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(pct);
+        }
+      },
+    });
+    return res.data;
+  },
+  removeProfilePhoto: async () => {
+    const res = await api.delete<ApiResponse<Customer>>('/customer/profile/photo');
+    return res.data;
+  },
+  initiateEmailChange: async (newEmail: string) => {
+    const res = await api.post<ApiResponse<OTPChallenge>>('/customer/profile/email/initiate', {
+      new_email: newEmail,
+    });
+    return res.data;
+  },
+  verifyEmailChange: async (payload: {
+    verification_id: string;
+    new_email: string;
+    otp: string;
+  }) => {
+    const res = await api.post<ApiResponse<Customer>>('/customer/profile/email/verify', payload);
+    return res.data;
+  },
+  resendEmailChangeOTP: async (verificationId: string) => {
+    const res = await api.post<ApiResponse<OTPChallenge>>('/customer/profile/email/resend', {
+      verification_id: verificationId,
+    });
+    return res.data;
+  },
+  changePassword: async (data: ChangePasswordPayload) => {
+    const res = await api.post<ApiResponse<{ message: string }>>('/customer/change-password', data);
     return res.data;
   },
   getMyOrders: async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {

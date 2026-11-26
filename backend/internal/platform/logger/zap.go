@@ -7,6 +7,11 @@ import (
 
 var Log *zap.SugaredLogger
 
+func init() {
+	// Initialize with Nop logger to prevent nil pointer panics
+	Log = zap.NewNop().Sugar()
+}
+
 func InitLogger(env string) (*zap.SugaredLogger, error) {
 	var zapConfig zap.Config
 	if env == "production" {

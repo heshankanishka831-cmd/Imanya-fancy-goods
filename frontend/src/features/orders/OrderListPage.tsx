@@ -7,24 +7,30 @@ import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { OrderDetailModal } from './OrderDetailModal';
 import { ShoppingCart, Search, Eye, MessageSquare } from 'lucide-react';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export const OrderListPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<'' | 'guest' | 'registered'>('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     loadOrders();
-  }, [statusFilter, search]);
+  }, [statusFilter, paymentFilter, customerTypeFilter, debouncedSearch]);
 
   const loadOrders = async () => {
     try {
       setIsLoading(true);
       const res = await adminApi.getOrders({
         status: statusFilter || undefined,
-        search: search || undefined,
+        payment_status: paymentFilter || undefined,
+        customer_type: customerTypeFilter || undefined,
+        search: debouncedSearch || undefined,
       });
       if (res.success && res.data) {
         setOrders(res.data);
@@ -40,7 +46,7 @@ export const OrderListPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Customer Wholesale Orders</h2>
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Customer Orders</h2>
           <p className="text-xs text-gray-500">Review incoming purchase requests, change statuses, and track historical orders</p>
         </div>
       </div>
@@ -57,6 +63,28 @@ export const OrderListPage: React.FC = () => {
             className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
+        <select
+          value={customerTypeFilter}
+          onChange={(e) => setCustomerTypeFilter(e.target.value as '' | 'guest' | 'registered')}
+          className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Customers</option>
+          <option value="guest">Guest Orders</option>
+          <option value="registered">Registered Customers</option>
+        </select>
+
+        <select
+          value={paymentFilter}
+          onChange={(e) => setPaymentFilter(e.target.value)}
+          className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Payments</option>
+          <option value="PAYMENT_PENDING">PAYMENT_PENDING</option>
+          <option value="RECEIPT_RECEIVED">RECEIPT_RECEIVED</option>
+          <option value="PAYMENT_VERIFIED">PAYMENT_VERIFIED</option>
+          <option value="PAYMENT_REJECTED">PAYMENT_REJECTED</option>
+        </select>
 
         <select
           value={statusFilter}
@@ -90,6 +118,7 @@ export const OrderListPage: React.FC = () => {
                   <th className="pb-3">Phone</th>
                   <th className="pb-3">Items Count</th>
                   <th className="pb-3">Total Value</th>
+                  <th className="pb-3">Payment</th>
                   <th className="pb-3">Status</th>
                   <th className="pb-3">Date</th>
                   <th className="pb-3 text-right">Actions</th>
@@ -99,10 +128,22 @@ export const OrderListPage: React.FC = () => {
                 {orders.map((o) => (
                   <tr key={o.id} className="hover:bg-gray-50/50">
                     <td className="py-3.5 font-bold text-gray-900 font-mono">{o.order_number}</td>
-                    <td className="py-3.5 font-semibold text-gray-800">{o.customer_name}</td>
+                    <td className="py-3.5 font-semibold text-gray-800">
+                      <div className="flex items-center gap-1.5">
+                        <span>{o.customer_name}</span>
+                        {o.is_guest && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            Guest
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3.5 font-mono text-gray-500">{o.customer_phone}</td>
                     <td className="py-3.5 text-gray-500">{o.items?.length || 0} items</td>
                     <td className="py-3.5 font-extrabold text-gray-900">{formatCurrency(o.total_amount)}</td>
+                    <td className="py-3.5">
+                      <Badge status={o.payment_status || 'PAYMENT_PENDING'} />
+                    </td>
                     <td className="py-3.5">
                       <Badge status={o.status} />
                     </td>

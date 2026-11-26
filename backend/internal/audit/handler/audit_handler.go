@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 )

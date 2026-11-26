@@ -3,9 +3,9 @@ package model
 import (
 	"time"
 
-	catalogModel "wholesale-management/internal/catalog/model"
-	supplierModel "wholesale-management/internal/suppliers/model"
-	userModel "wholesale-management/internal/users/model"
+	catalogModel "distribution-management/internal/catalog/model"
+	supplierModel "distribution-management/internal/suppliers/model"
+	userModel "distribution-management/internal/users/model"
 )
 
 type PurchaseOrder struct {

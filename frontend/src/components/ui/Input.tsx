@@ -25,7 +25,7 @@ export const Input: React.FC<InputProps> = ({
       )}
       <input
         id={inputId}
-        className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm ${
+        className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2C6291] focus:border-transparent transition-all shadow-sm ${
           error ? 'border-rose-400 bg-rose-50/30' : 'border-gray-300 bg-white'
         } ${className}`}
         {...props}

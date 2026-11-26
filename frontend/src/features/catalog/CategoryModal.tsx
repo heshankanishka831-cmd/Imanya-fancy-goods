@@ -87,7 +87,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Wholesale classification details..."
+            placeholder="Category classification details..."
           />
         </div>
 

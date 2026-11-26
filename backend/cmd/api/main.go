@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"wholesale-management/internal/app"
+	"distribution-management/internal/app"
 )
 
 func main() {

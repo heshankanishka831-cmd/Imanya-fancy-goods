@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"wholesale-management/internal/config"
-	"wholesale-management/internal/platform/database"
-	"wholesale-management/internal/platform/logger"
+	"distribution-management/internal/config"
+	"distribution-management/internal/platform/database"
+	"distribution-management/internal/platform/logger"
 )
 
 func main() {

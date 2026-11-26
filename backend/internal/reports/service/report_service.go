@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
+	"sync"
 	"time"
-	"wholesale-management/internal/reports/dto"
+	"distribution-management/internal/reports/dto"
 
 	"gorm.io/gorm"
 )
@@ -22,91 +23,139 @@ func NewReportService(db *gorm.DB) ReportService {
 }
 
 func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.DashboardMetricsResponse, error) {
-	var totalProducts int64
-	_ = s.db.WithContext(ctx).Table("products").Where("is_active = true").Count(&totalProducts).Error
+	var (
+		totalProducts       int64
+		totalCategories     int64
+		totalInventoryUnits int64
+		lowStockCount       int64
+		outOfStockCount     int64
+		inventoryValuation  float64
+		totalOrders         int64
+		totalVolume         float64
+		pendingVolume       float64
+		totalCustomers      int64
+		totalSuppliers      int64
+		totalPurchaseOrders int64
+		pendingPOs          int64
+		statusCounts        = make(map[string]int64)
+		recentOrders        = make([]dto.RecentOrderDTO, 0)
+	)
 
-	var lowStockCount int64
-	_ = s.db.WithContext(ctx).Table("product_stock").
-		Where("(current_stock - allocated_stock) <= low_stock_threshold").
-		Count(&lowStockCount).Error
+	var wg sync.WaitGroup
+	wg.Add(6)
 
-	var outOfStockCount int64
-	_ = s.db.WithContext(ctx).Table("product_stock").
-		Where("current_stock = 0").
-		Count(&outOfStockCount).Error
+	// 1. Catalog counts
+	go func() {
+		defer wg.Done()
+		_ = s.db.WithContext(ctx).Table("products").Where("is_active = true").Count(&totalProducts).Error
+		_ = s.db.WithContext(ctx).Table("categories").Where("is_active = true").Count(&totalCategories).Error
+	}()
 
-	var totalOrders int64
-	_ = s.db.WithContext(ctx).Table("orders").Count(&totalOrders).Error
+	// 2. Consolidated inventory stock & valuation query
+	go func() {
+		defer wg.Done()
+		var invAgg struct {
+			TotalUnits int64
+			LowStock   int64
+			OutOfStock int64
+			Valuation  float64
+		}
+		_ = s.db.WithContext(ctx).Table("product_stock").
+			Joins("JOIN products ON products.id = product_stock.product_id").
+			Select(`
+				COALESCE(SUM(product_stock.current_stock), 0) AS total_units,
+				COUNT(*) FILTER (WHERE (product_stock.current_stock - product_stock.allocated_stock) <= product_stock.low_stock_threshold) AS low_stock,
+				COUNT(*) FILTER (WHERE product_stock.current_stock = 0) AS out_of_stock,
+				COALESCE(SUM(product_stock.current_stock * products.cost_price), 0) AS valuation
+			`).
+			Scan(&invAgg).Error
+		totalInventoryUnits = invAgg.TotalUnits
+		lowStockCount = invAgg.LowStock
+		outOfStockCount = invAgg.OutOfStock
+		inventoryValuation = invAgg.Valuation
+	}()
 
-	var totalVolume float64
-	_ = s.db.WithContext(ctx).Table("orders").
-		Where("status IN ('CONFIRMED', 'PROCESSING', 'COMPLETED', 'DELIVERED')").
-		Select("COALESCE(SUM(total_amount), 0)").
-		Row().Scan(&totalVolume)
+	// 3. Consolidated orders volume & status breakdown
+	go func() {
+		defer wg.Done()
+		type statusGroup struct {
+			Status string
+			Count  int64
+			Volume float64
+		}
+		var groups []statusGroup
+		_ = s.db.WithContext(ctx).Table("orders").
+			Select("status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS volume").
+			Group("status").
+			Scan(&groups).Error
+		for _, g := range groups {
+			statusCounts[g.Status] = g.Count
+			totalOrders += g.Count
+			switch g.Status {
+			case "CONFIRMED", "PROCESSING", "COMPLETED", "DELIVERED":
+				totalVolume += g.Volume
+			case "PENDING":
+				pendingVolume += g.Volume
+			}
+		}
+	}()
 
-	var pendingVolume float64
-	_ = s.db.WithContext(ctx).Table("orders").
-		Where("status = 'PENDING'").
-		Select("COALESCE(SUM(total_amount), 0)").
-		Row().Scan(&pendingVolume)
+	// 4. Customers & Suppliers counts
+	go func() {
+		defer wg.Done()
+		_ = s.db.WithContext(ctx).Table("customers").Where("is_active = true").Count(&totalCustomers).Error
+		_ = s.db.WithContext(ctx).Table("suppliers").Where("is_active = true").Count(&totalSuppliers).Error
+	}()
 
-	var totalCustomers int64
-	_ = s.db.WithContext(ctx).Table("customers").Where("is_active = true").Count(&totalCustomers).Error
+	// 5. Consolidated Purchase Orders query
+	go func() {
+		defer wg.Done()
+		var poAgg struct {
+			Total   int64
+			Pending int64
+		}
+		_ = s.db.WithContext(ctx).Table("purchase_orders").
+			Select(`
+				COUNT(*) AS total,
+				COUNT(*) FILTER (WHERE status IN ('DRAFT', 'ORDERED', 'PARTIALLY_RECEIVED')) AS pending
+			`).
+			Scan(&poAgg).Error
+		totalPurchaseOrders = poAgg.Total
+		pendingPOs = poAgg.Pending
+	}()
 
-	var inventoryValuation float64
-	_ = s.db.WithContext(ctx).Table("product_stock").
-		Joins("JOIN products ON products.id = product_stock.product_id").
-		Select("COALESCE(SUM(product_stock.current_stock * products.cost_price), 0)").
-		Row().Scan(&inventoryValuation)
+	// 6. Recent orders (supporting both guest and registered orders)
+	go func() {
+		defer wg.Done()
+		type recentOrderRaw struct {
+			ID          string
+			OrderNumber string
+			CustName    string
+			TotalAmount float64
+			Status      string
+			CreatedAt   string
+		}
+		var recentRaw []recentOrderRaw
+		_ = s.db.WithContext(ctx).Table("orders").
+			Select("orders.id, orders.order_number, COALESCE(NULLIF(orders.guest_name, ''), customers.name, 'Guest') as cust_name, orders.total_amount, orders.status, TO_CHAR(orders.created_at, 'YYYY-MM-DD HH24:MI') as created_at").
+			Joins("LEFT JOIN customers ON customers.id = orders.customer_id").
+			Order("orders.created_at DESC").
+			Limit(5).
+			Scan(&recentRaw).Error
+		for _, r := range recentRaw {
+			recentOrders = append(recentOrders, dto.RecentOrderDTO{
+				ID:          r.ID,
+				OrderNumber: r.OrderNumber,
+				Customer:    r.CustName,
+				TotalAmount: r.TotalAmount,
+				Status:      r.Status,
+				CreatedAt:   r.CreatedAt,
+			})
+		}
+	}()
 
-	var activeSuppliers int64
-	_ = s.db.WithContext(ctx).Table("suppliers").Where("is_active = true").Count(&activeSuppliers).Error
-
-	var pendingPOs int64
-	_ = s.db.WithContext(ctx).Table("purchase_orders").
-		Where("status IN ('DRAFT', 'ORDERED', 'PARTIALLY_RECEIVED')").
-		Count(&pendingPOs).Error
-
-	// Status breakdown
-	statusCounts := make(map[string]int64)
-	type statusGroup struct {
-		Status string
-		Count  int64
-	}
-	var groups []statusGroup
-	_ = s.db.WithContext(ctx).Table("orders").Select("status, count(*) as count").Group("status").Scan(&groups).Error
-	for _, g := range groups {
-		statusCounts[g.Status] = g.Count
-	}
-
-	// Recent orders
-	type recentOrderRaw struct {
-		ID          string
-		OrderNumber string
-		CustName    string
-		TotalAmount float64
-		Status      string
-		CreatedAt   string
-	}
-	var recentRaw []recentOrderRaw
-	_ = s.db.WithContext(ctx).Table("orders").
-		Select("orders.id, orders.order_number, customers.name as cust_name, orders.total_amount, orders.status, TO_CHAR(orders.created_at, 'YYYY-MM-DD HH24:MI') as created_at").
-		Joins("LEFT JOIN customers ON customers.id = orders.customer_id").
-		Order("orders.created_at DESC").
-		Limit(5).
-		Scan(&recentRaw).Error
-
-	recentOrders := make([]dto.RecentOrderDTO, 0)
-	for _, r := range recentRaw {
-		recentOrders = append(recentOrders, dto.RecentOrderDTO{
-			ID:          r.ID,
-			OrderNumber: r.OrderNumber,
-			Customer:    r.CustName,
-			TotalAmount: r.TotalAmount,
-			Status:      r.Status,
-			CreatedAt:   r.CreatedAt,
-		})
-	}
+	wg.Wait()
+	activeSuppliers := totalSuppliers
 
 	// Low stock items
 	type lowStockRaw struct {
@@ -179,23 +228,27 @@ func (s *reportService) GetDashboardMetrics(ctx context.Context) (*dto.Dashboard
 	}
 
 	return &dto.DashboardMetricsResponse{
-		TotalProducts:      totalProducts,
-		LowStockCount:      lowStockCount,
-		OutOfStockCount:    outOfStockCount,
-		TotalOrders:        totalOrders,
-		PendingOrders:      statusCounts["PENDING"],
-		ProcessingOrders:   statusCounts["PROCESSING"],
-		CompletedOrders:    statusCounts["DELIVERED"] + statusCounts["COMPLETED"],
-		TotalOrderVolume:   totalVolume,
-		PendingOrderVolume: pendingVolume,
-		InventoryValuation: inventoryValuation,
-		TotalCustomers:     totalCustomers,
-		ActiveSuppliers:    activeSuppliers,
-		PendingPOs:         pendingPOs,
-		OrdersByStatus:     statusCounts,
-		RecentOrders:       recentOrders,
-		LowStockAlerts:     lowStockAlerts,
-		WeeklySales:        weeklySales,
+		TotalProducts:       totalProducts,
+		TotalCategories:     totalCategories,
+		TotalInventoryUnits: totalInventoryUnits,
+		LowStockCount:       lowStockCount,
+		OutOfStockCount:     outOfStockCount,
+		TotalOrders:         totalOrders,
+		PendingOrders:       statusCounts["PENDING"],
+		ProcessingOrders:    statusCounts["PROCESSING"],
+		CompletedOrders:     statusCounts["DELIVERED"] + statusCounts["COMPLETED"],
+		TotalOrderVolume:    totalVolume,
+		PendingOrderVolume:  pendingVolume,
+		InventoryValuation:  inventoryValuation,
+		TotalCustomers:      totalCustomers,
+		TotalSuppliers:      totalSuppliers,
+		ActiveSuppliers:     activeSuppliers,
+		TotalPurchaseOrders: totalPurchaseOrders,
+		PendingPOs:          pendingPOs,
+		OrdersByStatus:      statusCounts,
+		RecentOrders:        recentOrders,
+		LowStockAlerts:      lowStockAlerts,
+		WeeklySales:         weeklySales,
 	}, nil
 }
 
@@ -239,7 +292,7 @@ func (s *reportService) GetSalesReport(ctx context.Context, period string) (*dto
 		avgOrder = totalRevenue / float64(totalOrders)
 	}
 
-	// Total wholesale units sold
+	// Total units sold
 	var totalUnits int64
 	_ = s.db.WithContext(ctx).Table("order_items").
 		Joins("JOIN orders ON orders.id = order_items.order_id").

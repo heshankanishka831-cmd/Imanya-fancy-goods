@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
-	"wholesale-management/internal/catalog/model"
+	"distribution-management/internal/catalog/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ProductFilter struct {
@@ -87,7 +88,7 @@ func (r *productRepository) Update(ctx context.Context, tx *gorm.DB, product *mo
 	if tx != nil {
 		db = tx
 	}
-	return db.WithContext(ctx).Save(product).Error
+	return db.WithContext(ctx).Omit(clause.Associations).Save(product).Error
 }
 
 func (r *productRepository) Delete(ctx context.Context, id string) error {

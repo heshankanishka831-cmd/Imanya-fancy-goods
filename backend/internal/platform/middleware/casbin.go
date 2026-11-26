@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/platform/response"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/casbin/casbin/v3/model"

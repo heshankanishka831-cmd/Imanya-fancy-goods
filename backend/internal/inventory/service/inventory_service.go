@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/inventory/dto"
-	"wholesale-management/internal/inventory/model"
-	"wholesale-management/internal/inventory/repository"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/inventory/dto"
+	"distribution-management/internal/inventory/model"
+	"distribution-management/internal/inventory/repository"
 
 	"gorm.io/gorm"
 )

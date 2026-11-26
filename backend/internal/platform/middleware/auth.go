@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -111,4 +111,19 @@ func GetCurrentRoleName(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// RequireExactRole enforces exact role matching (without Super Administrator bypass)
+func RequireExactRole(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userRole := GetCurrentRoleName(c)
+		for _, r := range roles {
+			if r == userRole && userRole != "" {
+				c.Next()
+				return
+			}
+		}
+		response.Forbidden(c, "Customer role authorization is required for this resource")
+		c.Abort()
+	}
 }

@@ -6,10 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	"wholesale-management/internal/audit/service"
-	"wholesale-management/internal/catalog/dto"
-	"wholesale-management/internal/catalog/model"
-	"wholesale-management/internal/catalog/repository"
+	"distribution-management/internal/audit/service"
+	"distribution-management/internal/catalog/dto"
+	"distribution-management/internal/catalog/model"
+	"distribution-management/internal/catalog/repository"
 )
 
 type CategoryService interface {

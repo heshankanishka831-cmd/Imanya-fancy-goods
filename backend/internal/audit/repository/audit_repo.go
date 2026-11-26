@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"wholesale-management/internal/audit/model"
+	"distribution-management/internal/audit/model"
 
 	"gorm.io/gorm"
 )

@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { adminApi } from '../../services/endpoints';
-import { DashboardMetrics, ProductAdmin, Order } from '../../types';
+import { DashboardMetrics, ProductAdmin, Order, MembershipStats, MembershipCustomerItem, Customer } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
 import { OrderDetailModal } from '../orders/OrderDetailModal';
+import { MembershipBadge } from '../../components/ui/MembershipBadge';
+import { MembershipSettingsModal } from './MembershipSettingsModal';
+import { CustomerDetailModal } from '../customers/CustomerDetailModal';
 import {
   Package,
   AlertTriangle,
@@ -30,8 +33,18 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
+  Truck,
+  FileSpreadsheet,
+  Crown,
+  Award,
+  Shield,
+  Settings,
+  SlidersHorizontal,
+  Search,
+  Eye,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useDebounce } from '../../hooks/useDebounce';
 
 // Helper function to generate ultra-smooth cubic bezier spline curves for SVG charts
 function getSmoothCurvePath(points: { x: number; y: number }[]): string {
@@ -67,9 +80,53 @@ export const DashboardPage: React.FC = () => {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [inspectingOrderId, setInspectingOrderId] = useState<string | null>(null);
 
+  // Membership & Loyalty states
+  const [membershipStats, setMembershipStats] = useState<MembershipStats | null>(null);
+  const [membershipCustomers, setMembershipCustomers] = useState<MembershipCustomerItem[]>([]);
+  const [selectedTierFilter, setSelectedTierFilter] = useState<string>('ALL');
+  const [membershipSearch, setMembershipSearch] = useState<string>('');
+  const debouncedMembershipSearch = useDebounce(membershipSearch, 300);
+  const [membershipSortBy, setMembershipSortBy] = useState<string>('lifetime_spent');
+  const [membershipSortOrder, setMembershipSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [inspectingCustomer, setInspectingCustomer] = useState<Customer | null>(null);
+
   useEffect(() => {
     loadDashboardData();
+    loadMembershipStats();
   }, []);
+
+  useEffect(() => {
+    loadMembershipCustomers();
+  }, [selectedTierFilter, debouncedMembershipSearch, membershipSortBy, membershipSortOrder]);
+
+  const loadMembershipStats = async () => {
+    try {
+      const res = await adminApi.getMembershipStats();
+      if (res.success && res.data) {
+        setMembershipStats(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load membership stats', err);
+    }
+  };
+
+  const loadMembershipCustomers = async () => {
+    try {
+      const res = await adminApi.getMembershipCustomers({
+        tier: selectedTierFilter === 'ALL' ? undefined : selectedTierFilter,
+        search: debouncedMembershipSearch || undefined,
+        sort_by: membershipSortBy,
+        order: membershipSortOrder,
+        limit: 10,
+      });
+      if (res.success && res.data) {
+        setMembershipCustomers(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load membership customers', err);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -135,7 +192,7 @@ export const DashboardPage: React.FC = () => {
         </div>
         <h3 className="text-lg font-bold text-gray-900 mb-2">Telemetry Pipeline Disrupted</h3>
         <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-          {error || 'Unable to establish live connection to the wholesale management database.'}
+          {error || 'Unable to establish live connection to the distribution management database.'}
         </p>
         <Button onClick={loadDashboardData} className="inline-flex items-center gap-2 mx-auto">
           <RefreshCw className="h-4 w-4" />
@@ -145,13 +202,13 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  // 1. KPI Cards Setup (Creative Tim / Argon Dashboard Style)
+  // 1. KPI Cards Setup (Creative Tim / Argon Dashboard Style with 8 Connected Enterprise Modules)
   const pendingOrdersCount = metrics.pending_orders || 0;
   const pendingRevenueAmount = metrics.pending_order_volume || 0;
 
   const kpis = [
     {
-      label: "Verified Wholesale Income",
+      label: "Verified Sales Income",
       val: formatCurrency(metrics.total_order_volume || 0),
       icon: TrendingUp,
       trend: pendingRevenueAmount > 0
@@ -160,9 +217,10 @@ export const DashboardPage: React.FC = () => {
       trendColor: pendingRevenueAmount > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold',
       subtext: 'Confirmed via WhatsApp bank slips',
       iconBg: 'bg-gradient-to-tl from-slate-900 to-slate-800 text-white shadow-slate-900/20',
+      link: '/admin/reports',
     },
     {
-      label: "Wholesale Order Demand",
+      label: "Sales Order Demand",
       val: `${metrics.total_orders || 0}`,
       icon: ShoppingCart,
       trend: pendingOrdersCount > 0
@@ -171,26 +229,67 @@ export const DashboardPage: React.FC = () => {
       trendColor: pendingOrdersCount > 0 ? 'text-amber-600 font-bold' : 'text-blue-600 font-bold',
       subtext: 'Direct buyer storefront submissions',
       iconBg: 'bg-gradient-to-tl from-blue-700 to-blue-600 text-white shadow-blue-600/20',
+      link: '/admin/orders',
     },
     {
-      label: "Active Listed SKUs",
+      label: "Customer Accounts",
+      val: `${metrics.total_customers || 0}`,
+      icon: Users,
+      trend: 'Registered commercial clients',
+      trendColor: 'text-sky-600 font-bold',
+      subtext: 'Verified retail shop buyers',
+      iconBg: 'bg-gradient-to-tl from-sky-700 to-sky-600 text-white shadow-sky-600/20',
+      link: '/admin/customers',
+    },
+    {
+      label: "Warehouse Physical Stock",
+      val: `${metrics.total_inventory_units || 0} Units`,
+      icon: Boxes,
+      trend: formatCurrency(metrics.inventory_valuation || 0),
+      trendColor: 'text-purple-600 font-bold',
+      subtext: 'Total warehouse asset valuation',
+      iconBg: 'bg-gradient-to-tl from-purple-700 to-purple-600 text-white shadow-purple-600/20',
+      link: '/admin/inventory',
+    },
+    {
+      label: "Commercial Catalogue SKUs",
       val: `${metrics.total_products || 0}`,
       icon: Package,
       trend: `${metrics.total_products || 0} active commercial products`,
       trendColor: 'text-indigo-600 font-bold',
-      subtext: 'Wholesale fancy goods catalog',
+      subtext: 'Fancy goods product catalog',
       iconBg: 'bg-gradient-to-tl from-indigo-700 to-indigo-600 text-white shadow-indigo-600/20',
+      link: '/admin/products',
     },
     {
-      label: "Warehouse Stock Sentinel",
-      val: `${metrics.low_stock_count || 0}`,
-      icon: AlertTriangle,
-      trend: (metrics.low_stock_count || 0) > 0 ? 'Stock replenishing required' : 'Optimal stock health',
-      trendColor: (metrics.low_stock_count || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold',
-      subtext: (metrics.low_stock_count || 0) > 0 ? 'Safety threshold breached' : 'Zero depleted inventory items',
-      iconBg: (metrics.low_stock_count || 0) > 0
-        ? 'bg-gradient-to-tl from-amber-600 to-amber-500 text-white shadow-amber-500/20'
-        : 'bg-gradient-to-tl from-emerald-600 to-emerald-500 text-white shadow-emerald-500/20',
+      label: "Product Categories",
+      val: `${metrics.total_categories || 0}`,
+      icon: Layers,
+      trend: 'Active inventory classifications',
+      trendColor: 'text-teal-600 font-bold',
+      subtext: 'Jewelry, cosmetics, novelties',
+      iconBg: 'bg-gradient-to-tl from-teal-700 to-teal-600 text-white shadow-teal-600/20',
+      link: '/admin/categories',
+    },
+    {
+      label: "Registered Suppliers",
+      val: `${metrics.total_suppliers || metrics.active_suppliers || 0}`,
+      icon: Truck,
+      trend: `${metrics.active_suppliers || metrics.total_suppliers || 0} active procurement channels`,
+      trendColor: 'text-cyan-600 font-bold',
+      subtext: 'Direct overseas & local vendors',
+      iconBg: 'bg-gradient-to-tl from-cyan-700 to-cyan-600 text-white shadow-cyan-600/20',
+      link: '/admin/suppliers',
+    },
+    {
+      label: "Import Purchase Orders",
+      val: `${metrics.total_purchase_orders || 0}`,
+      icon: FileSpreadsheet,
+      trend: (metrics.pending_pos || 0) > 0 ? `${metrics.pending_pos} pending receipt` : 'All shipments cleared',
+      trendColor: (metrics.pending_pos || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold',
+      subtext: 'Supplier PO tracking & GRN',
+      iconBg: 'bg-gradient-to-tl from-rose-700 to-rose-600 text-white shadow-rose-600/20',
+      link: '/admin/procurement',
     },
   ];
 
@@ -279,7 +378,7 @@ export const DashboardPage: React.FC = () => {
             Super Administrator Executive Console
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Real-time wholesale telemetry, WhatsApp bank slip verification, and inventory health sentinel.
+            Real-time sales telemetry, WhatsApp bank slip verification, and inventory health sentinel.
           </p>
         </div>
 
@@ -349,14 +448,15 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 1. TOP ROW: 4 Metric Cards (Creative Tim / Argon Dashboard Style) */}
+      {/* 1. TOP METRIC CARDS (8 Enterprise Modules Connected to Live Database) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
-            <div
+            <Link
               key={idx}
-              className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between group"
+              to={kpi.link}
+              className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_12px_28px_0_rgba(0,0,0,0.09)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -365,27 +465,30 @@ export const DashboardPage: React.FC = () => {
                   </p>
                   <h3 className="text-2xl font-black text-gray-900 tracking-tight">{kpi.val}</h3>
                 </div>
-                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform ${kpi.iconBg}`}>
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform ${kpi.iconBg}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
 
               <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between text-[11px]">
                 <span className={kpi.trendColor}>{kpi.trend}</span>
+                <span className="text-gray-400 text-[10px] group-hover:text-blue-600 transition-colors flex items-center gap-0.5">
+                  View <ChevronRight className="h-3 w-3" />
+                </span>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
 
       {/* 2. MIDDLE ROW: The Three Visual Diagram Cards (Matching Reference Middle Row) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1: Weekly Wholesale Orders (Emerald Green Rounded Bar Chart) */}
+        {/* Card 1: Weekly Sales Orders (Emerald Green Rounded Bar Chart) */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Wholesale Orders</h4>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Weekly Sales Orders</h4>
                 <p className="text-[11px] text-gray-500 mb-3">Daily bulk inquiries & buyer requests</p>
               </div>
               <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -464,12 +567,12 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Daily Wholesale Income (Curved Spline Line Chart & Gradient Fill) */}
+        {/* Card 2: Daily Sales Income (Curved Spline Line Chart & Gradient Fill) */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_10px_25px_0_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Daily Wholesale Income</h4>
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">Daily Sales Income</h4>
                 <p className="text-[11px] text-gray-500 mb-3">(+100%) confirmed WhatsApp bank receipts</p>
               </div>
               <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
@@ -671,13 +774,13 @@ export const DashboardPage: React.FC = () => {
 
       {/* 3. BOTTOM ROW: Two Cards (Matching Reference Image Projects Table + Orders Overview) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Card (2 Columns): Wholesale Catalogue & Stock Performance (Projects equivalent) */}
+        {/* Left Card (2 Columns): Product Catalogue & Stock Performance (Projects equivalent) */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h4 className="text-base font-bold text-gray-900 tracking-tight">
-                  Top Wholesale Products & Stock Ledger
+                  Top Products & Stock Ledger
                 </h4>
                 <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -698,13 +801,13 @@ export const DashboardPage: React.FC = () => {
             {topProducts.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <Package className="h-10 w-10 mx-auto text-gray-300 mb-2" />
-                <p className="text-xs font-medium">No wholesale products added yet.</p>
+                <p className="text-xs font-medium">No products added yet.</p>
                 <Link
                   to="/admin/products"
                   className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-xs hover:bg-blue-700 transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>Create First Wholesale SKU</span>
+                  <span>Create First Product SKU</span>
                 </Link>
               </div>
             ) : (
@@ -714,7 +817,7 @@ export const DashboardPage: React.FC = () => {
                     <tr>
                       <th className="pb-3">Product / SKU</th>
                       <th className="pb-3">Category</th>
-                      <th className="pb-3">Wholesale Rate</th>
+                      <th className="pb-3">Unit Price</th>
                       <th className="pb-3">Available Stock</th>
                       <th className="pb-3 text-right">Action</th>
                     </tr>
@@ -828,7 +931,7 @@ export const DashboardPage: React.FC = () => {
             {recentOrders.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <Bell className="h-10 w-10 mx-auto text-gray-300 mb-2" />
-                <p className="text-xs font-medium">No wholesale orders recorded yet.</p>
+                <p className="text-xs font-medium">No customer orders recorded yet.</p>
                 <p className="text-[11px] text-gray-400 mt-1">
                   When retail buyers submit carts, orders will populate this live timeline.
                 </p>
@@ -873,7 +976,7 @@ export const DashboardPage: React.FC = () => {
                         </div>
 
                         <p className="text-xs text-gray-600 font-medium mt-0.5">
-                          Order #{o.order_number} &bull; {o.customer || 'Wholesale Buyer'}
+                          Order #{o.order_number} &bull; {o.customer || 'Customer'}
                         </p>
 
                         <div className="mt-2 flex items-center gap-2">
@@ -905,6 +1008,250 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 5. Customer Membership & Automatic Loyalty Section */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                <Crown className="w-4 h-4 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 tracking-tight">
+                Customer Membership & Loyalty Tiers
+              </h3>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Automatic tier ranking based on confirmed lifetime customer purchases (Bronze, Silver, Gold, Platinum).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 border-slate-300 hover:bg-slate-50"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>Configure Thresholds</span>
+            </Button>
+            <Link
+              to="/admin/customers"
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+            >
+              <span>Full Directory</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* 5 Tier KPI Metric Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          {/* Total Customers */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Registered</span>
+              <Users className="w-4 h-4 text-slate-400" />
+            </div>
+            <p className="text-2xl font-black text-slate-900 mt-2">
+              {membershipStats?.total_customers ?? 0}
+            </p>
+            <span className="text-[10px] text-slate-400 mt-0.5 block">Registered Customers</span>
+          </div>
+
+          {/* Bronze Tier */}
+          <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200/80">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-900">Bronze</span>
+              <Shield className="w-4 h-4 text-amber-600" />
+            </div>
+            <p className="text-2xl font-black text-amber-950 mt-2">
+              {membershipStats?.bronze_count ?? 0}
+            </p>
+            <span className="text-[10px] text-amber-700/80 mt-0.5 block">Entry Tier</span>
+          </div>
+
+          {/* Silver Tier */}
+          <div className="p-4 rounded-xl bg-slate-100/70 border border-slate-300/80">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800">Silver</span>
+              <Award className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-black text-slate-900 mt-2">
+              {membershipStats?.silver_count ?? 0}
+            </p>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">Rs. 100k+ Tier</span>
+          </div>
+
+          {/* Gold Tier */}
+          <div className="p-4 rounded-xl bg-yellow-50/70 border border-yellow-300/80">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-900">Gold</span>
+              <Crown className="w-4 h-4 text-amber-500" />
+            </div>
+            <p className="text-2xl font-black text-amber-950 mt-2">
+              {membershipStats?.gold_count ?? 0}
+            </p>
+            <span className="text-[10px] text-amber-700 mt-0.5 block">High Volume Buyer</span>
+          </div>
+
+          {/* Platinum Tier */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-indigo-200/80 col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-900">Platinum VIP</span>
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+            </div>
+            <p className="text-2xl font-black text-indigo-950 mt-2">
+              {membershipStats?.platinum_count ?? 0}
+            </p>
+            <span className="text-[10px] text-indigo-600 mt-0.5 block">Elite Partners (Rs. 1M+)</span>
+          </div>
+        </div>
+
+        {/* Filters & Sorting Toolbar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2">
+          {/* Tier Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { id: 'ALL', label: 'All Levels' },
+              { id: 'BRONZE', label: 'Bronze' },
+              { id: 'SILVER', label: 'Silver' },
+              { id: 'GOLD', label: 'Gold' },
+              { id: 'PLATINUM', label: 'Platinum' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedTierFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  selectedTierFilter === tab.id
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search & Sort Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={membershipSearch}
+                onChange={(e) => setMembershipSearch(e.target.value)}
+                placeholder="Search customers..."
+                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-44 sm:w-56"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-gray-400" />
+              <select
+                value={`${membershipSortBy}:${membershipSortOrder}`}
+                onChange={(e) => {
+                  const [field, dir] = e.target.value.split(':');
+                  setMembershipSortBy(field);
+                  setMembershipSortOrder(dir as 'ASC' | 'DESC');
+                }}
+                className="py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+              >
+                <option value="lifetime_spent:DESC">Highest Spending First</option>
+                <option value="lifetime_spent:ASC">Lowest Spending First</option>
+                <option value="membership_tier:DESC">Membership Level</option>
+                <option value="created_at:DESC">Newest Registered</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Membership Table */}
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
+              <tr>
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4">Contact Info</th>
+                <th className="py-3 px-4">Membership Level</th>
+                <th className="py-3 px-4">Lifetime Spending</th>
+                <th className="py-3 px-4">Orders</th>
+                <th className="py-3 px-4">Registered Date</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+              {membershipCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-400">
+                    No customers match the selected tier filter.
+                  </td>
+                </tr>
+              ) : (
+                membershipCustomers.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50/70 transition-colors">
+                    <td className="py-3 px-4">
+                      <p className="font-bold text-gray-900">{c.name}</p>
+                      {c.business_name && (
+                        <p className="text-[11px] text-gray-500">{c.business_name}</p>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <p className="font-mono text-gray-700">{c.phone}</p>
+                      {c.email && (
+                        <p className="text-[11px] text-gray-400">{c.email}</p>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <MembershipBadge tier={c.membership_tier} size="xs" />
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-extrabold text-gray-900 font-mono">
+                        {formatCurrency(c.lifetime_spent)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-100">
+                        {c.order_count} orders
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-400 text-[11px]">
+                      {c.created_at ? formatDate(c.created_at).split(',')[0] : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInspectingCustomer({
+                            id: c.id,
+                            name: c.name,
+                            email: c.email,
+                            phone: c.phone,
+                            business_name: c.business_name,
+                            delivery_address: '',
+                            membership_tier: c.membership_tier,
+                            lifetime_spent: c.lifetime_spent,
+                            order_count: c.order_count,
+                            is_active: true,
+                            created_at: c.created_at,
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Inspect Profile</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Direct Order Verification Modal from Dashboard */}
       {selectedOrder && (
         <OrderDetailModal
@@ -921,6 +1268,24 @@ export const DashboardPage: React.FC = () => {
           order={selectedOrder}
         />
       )}
+
+      {/* Admin Membership Threshold Configuration Modal */}
+      <MembershipSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSaved={() => {
+          loadMembershipStats();
+          loadMembershipCustomers();
+          loadDashboardData();
+        }}
+      />
+
+      {/* Customer Profile Dossier Modal */}
+      <CustomerDetailModal
+        isOpen={!!inspectingCustomer}
+        onClose={() => setInspectingCustomer(null)}
+        customer={inspectingCustomer}
+      />
     </div>
   );
 };

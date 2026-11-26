@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../../services/endpoints';
 import { ProductAdmin, Category } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -8,13 +9,22 @@ import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { ProductModal } from './ProductModal';
-import { Plus, Edit2, Trash2, Search, Package, AlertTriangle, Images } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Package, AlertTriangle, Images, X, Percent } from 'lucide-react';
+import { useDebounce } from '../../hooks/useDebounce';
+import { notifyCatalogUpdated } from '../../utils/catalogSync';
 
 export const ProductListPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialCategoryParam = searchParams.get('category_id');
+
   const [products, setProducts] = useState<ProductAdmin[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<number | undefined>(undefined);
+  const [selectedCategory, setSelectedCategory] = useState<number | undefined>(
+    initialCategoryParam ? Number(initialCategoryParam) : undefined
+  );
+  const [discountFilter, setDiscountFilter] = useState<'all' | 'discounted'>('all');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductAdmin | null>(null);
@@ -26,8 +36,15 @@ export const ProductListPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const catId = searchParams.get('category_id');
+    if (catId) {
+      setSelectedCategory(Number(catId));
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     loadProducts();
-  }, [selectedCategory, search]);
+  }, [selectedCategory, debouncedSearch]);
 
   const loadCategories = async () => {
     try {
@@ -45,7 +62,7 @@ export const ProductListPage: React.FC = () => {
       setIsLoading(true);
       const res = await adminApi.getProducts({
         category_id: selectedCategory,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
       });
       if (res.success && res.data) {
         setProducts(res.data);
@@ -61,6 +78,7 @@ export const ProductListPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
     try {
       await adminApi.deleteProduct(id);
+      notifyCatalogUpdated();
       await loadProducts();
     } catch (err: any) {
       alert(err.response?.data?.error?.message || 'Failed to delete product');
@@ -71,9 +89,9 @@ export const ProductListPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Wholesale Catalogue</h2>
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Product Catalogue</h2>
           <p className="text-xs text-gray-500">
-            Manage SKUs, wholesale pricing (Rs.), stock indicators, and photo galleries (up to 5 photos)
+            Manage SKUs, product pricing (Rs.), stock indicators, and photo galleries (up to 5 photos)
           </p>
         </div>
         <Button
@@ -101,18 +119,69 @@ export const ProductListPage: React.FC = () => {
           />
         </div>
 
-        <select
-          value={selectedCategory || ''}
-          onChange={(e) => setSelectedCategory(e.target.value ? Number(e.target.value) : undefined)}
-          className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          {/* Discount Filter Pills */}
+          <div className="flex items-center bg-gray-100 p-0.5 rounded-xl border border-gray-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setDiscountFilter('all')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                discountFilter === 'all'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              All Items ({products.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDiscountFilter('discounted')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 ${
+                discountFilter === 'discounted'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-emerald-700 hover:text-emerald-800'
+              }`}
+            >
+              <Percent className="h-3 w-3" />
+              <span>Discounted ({products.filter((p) => p.is_discount_active).length})</span>
+            </button>
+          </div>
+
+          <select
+            value={selectedCategory || ''}
+            onChange={(e) => {
+              const val = e.target.value ? Number(e.target.value) : undefined;
+              setSelectedCategory(val);
+              if (val) {
+                setSearchParams({ category_id: String(val) });
+              } else {
+                setSearchParams({});
+              }
+            }}
+            className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedCategory && (
+            <button
+              onClick={() => {
+                setSelectedCategory(undefined);
+                setSearchParams({});
+              }}
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors flex items-center gap-1"
+              title="Clear category filter"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span>Clear Filter</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -131,6 +200,7 @@ export const ProductListPage: React.FC = () => {
                   <th className="pb-3">Product / SKU</th>
                   <th className="pb-3">Category</th>
                   <th className="pb-3">Sell Price</th>
+                  <th className="pb-3">Discount</th>
                   <th className="pb-3">Cost Price</th>
                   <th className="pb-3">Stock (Current / Alloc)</th>
                   <th className="pb-3">Available</th>
@@ -139,7 +209,9 @@ export const ProductListPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 font-medium text-gray-700">
-                {products.map((p) => {
+                {products
+                  .filter((p) => discountFilter === 'all' || p.is_discount_active)
+                  .map((p) => {
                   const imageCount = p.images?.length || 0;
 
                   return (
@@ -179,6 +251,9 @@ export const ProductListPage: React.FC = () => {
                             <p className="font-bold text-gray-900">{p.name}</p>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="font-mono text-gray-400 text-[11px]">{p.sku}</span>
+                              <span className="text-[10px] font-bold text-[#2C6291] bg-[#EBF2F7] px-1.5 py-0.2 rounded border border-[#2C6291]/20">
+                                Min: {p.min_order_quantity || 1}
+                              </span>
                               {imageCount > 0 && (
                                 <span className="text-[10px] text-blue-600 font-medium bg-blue-50 px-1.5 py-0.2 rounded">
                                   {imageCount} {imageCount === 1 ? 'photo' : 'photos'}
@@ -189,9 +264,53 @@ export const ProductListPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3.5">{p.category_name}</td>
-                      <td className="py-3.5 font-bold text-gray-900">
-                        {formatCurrency(p.selling_price)}
+                      <td className="py-3.5">
+                        {p.is_discount_active ? (
+                          <div>
+                            <span className="line-through text-gray-400 text-[11px] block">
+                              {formatCurrency(p.selling_price)}
+                            </span>
+                            <span className="font-black text-emerald-700">
+                              {formatCurrency(p.discounted_price || p.selling_price)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-bold text-gray-900">
+                            {formatCurrency(p.selling_price)}
+                          </span>
+                        )}
                         <span className="text-[10px] text-gray-400 font-normal ml-0.5">/{p.unit_of_measure}</span>
+                      </td>
+                      <td className="py-3.5">
+                        {p.is_discount_enabled && p.discount_percent ? (
+                          <div className="space-y-0.5">
+                            {p.discount_status === 'ACTIVE' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {p.discount_percent}% OFF (Active)
+                              </span>
+                            )}
+                            {p.discount_status === 'SCHEDULED' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                {p.discount_percent}% OFF (Scheduled)
+                              </span>
+                            )}
+                            {p.discount_status === 'EXPIRED' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                {p.discount_percent}% OFF (Expired)
+                              </span>
+                            )}
+                            {(!p.discount_status || p.discount_status === 'DISABLED') && (
+                              <span className="text-gray-400 text-[11px]">—</span>
+                            )}
+                            {p.discount_end_date && p.discount_status === 'ACTIVE' && (
+                              <span className="text-[10px] text-gray-400 block">
+                                Ends: {formatDate(p.discount_end_date)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-[11px]">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 font-mono text-gray-500">{formatCurrency(p.cost_price)}</td>
                       <td className="py-3.5 text-gray-500">

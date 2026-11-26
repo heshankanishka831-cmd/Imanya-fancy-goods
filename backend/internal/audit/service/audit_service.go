@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"wholesale-management/internal/audit/model"
-	"wholesale-management/internal/audit/repository"
-	"wholesale-management/internal/platform/logger"
+	"distribution-management/internal/audit/model"
+	"distribution-management/internal/audit/repository"
+	"distribution-management/internal/platform/logger"
 
 	"gorm.io/datatypes"
 )

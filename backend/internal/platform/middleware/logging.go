@@ -3,7 +3,7 @@ package middleware
 import (
 	"time"
 
-	"wholesale-management/internal/platform/logger"
+	"distribution-management/internal/platform/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"wholesale-management/internal/inventory/dto"
-	"wholesale-management/internal/inventory/service"
-	"wholesale-management/internal/platform/middleware"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/inventory/dto"
+	"distribution-management/internal/inventory/service"
+	"distribution-management/internal/platform/middleware"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 )

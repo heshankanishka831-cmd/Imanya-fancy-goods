@@ -59,7 +59,7 @@ export const UserModal: React.FC<UserModalProps> = ({
     },
     {
       key: 'orders',
-      label: 'Wholesale Customer Orders',
+      label: 'Customer Orders',
       description: 'View orders, update processing status, confirm bank deposit slips',
       read: true,
       edit: true,
@@ -67,7 +67,7 @@ export const UserModal: React.FC<UserModalProps> = ({
     },
     {
       key: 'customers',
-      label: 'Wholesale Customer Accounts',
+      label: 'Customer Accounts',
       description: 'View customer accounts, business details, account activation',
       read: true,
       edit: true,
@@ -76,7 +76,7 @@ export const UserModal: React.FC<UserModalProps> = ({
     {
       key: 'reports',
       label: 'Sales Analytics & PDF Reports',
-      description: 'Turnover statistics, bulk wholesale analytics, printable executive PDF reports',
+      description: 'Turnover statistics, sales analytics, printable executive PDF reports',
       read: true,
       edit: false,
       hasEdit: false,
@@ -261,7 +261,7 @@ export const UserModal: React.FC<UserModalProps> = ({
             required
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            placeholder="kamal@wholesale.local"
+            placeholder="kamal@imanya.local"
           />
         </div>
 

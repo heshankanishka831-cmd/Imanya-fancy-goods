@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Cart } from '../../types';
 import { publicApi } from '../../services/endpoints';
+import { subscribeCatalogUpdated } from '../../utils/catalogSync';
 
 interface CartContextType {
   cart: Cart | null;
@@ -20,7 +21,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
-  const fetchCart = async () => {
+  const fetchCart = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await publicApi.getCart();
@@ -32,11 +33,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchCart();
-  }, []);
+  }, [fetchCart]);
+
+  // Refresh cart pricing whenever CartDrawer opens or Admin updates catalog discounts
+  useEffect(() => {
+    if (isCartOpen) {
+      fetchCart();
+    }
+  }, [isCartOpen, fetchCart]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeCatalogUpdated(() => {
+      fetchCart();
+    });
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCart();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchCart]);
 
   const addToCart = async (productId: string, quantity: number) => {
     const res = await publicApi.addToCart(productId, quantity);

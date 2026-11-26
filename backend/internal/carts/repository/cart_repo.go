@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"wholesale-management/internal/carts/model"
+	"distribution-management/internal/carts/model"
 
 	"gorm.io/gorm"
 )
@@ -28,22 +28,56 @@ func NewCartRepository(db *gorm.DB) CartRepository {
 }
 
 func (r *cartRepository) GetBySessionOrCustomer(ctx context.Context, sessionID string, customerID *string) (*model.Cart, error) {
-	var cart model.Cart
-	query := r.db.WithContext(ctx).
-		Preload("Items.Product.Images").
-		Preload("Items.Product.Stock")
+	var customerCart model.Cart
+	var sessionCart model.Cart
 
-	if customerID != nil {
-		query = query.Where("customer_id = ?", *customerID)
-	} else {
-		query = query.Where("session_id = ?", sessionID)
+	hasCustomerCart := false
+	if customerID != nil && *customerID != "" {
+		err := r.db.WithContext(ctx).
+			Preload("Items.Product.Images").
+			Preload("Items.Product.Stock").
+			Where("customer_id = ?", *customerID).
+			First(&customerCart).Error
+		if err == nil {
+			hasCustomerCart = true
+		}
 	}
 
-	err := query.First(&cart).Error
-	if err != nil {
-		return nil, err
+	hasSessionCart := false
+	if sessionID != "" {
+		err := r.db.WithContext(ctx).
+			Preload("Items.Product.Images").
+			Preload("Items.Product.Stock").
+			Where("session_id = ?", sessionID).
+			First(&sessionCart).Error
+		if err == nil {
+			hasSessionCart = true
+		}
 	}
-	return &cart, nil
+
+	// 1. If customer cart exists and has items, prioritize it
+	if hasCustomerCart && len(customerCart.Items) > 0 {
+		return &customerCart, nil
+	}
+
+	// 2. If session cart exists and has items, associate with customer and prioritize it
+	if hasSessionCart && len(sessionCart.Items) > 0 {
+		if customerID != nil && *customerID != "" && sessionCart.CustomerID == nil {
+			sessionCart.CustomerID = customerID
+			_ = r.db.WithContext(ctx).Model(&sessionCart).Update("customer_id", *customerID)
+		}
+		return &sessionCart, nil
+	}
+
+	// 3. Fallback to whichever cart was found
+	if hasCustomerCart {
+		return &customerCart, nil
+	}
+	if hasSessionCart {
+		return &sessionCart, nil
+	}
+
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (r *cartRepository) GetByID(ctx context.Context, id string) (*model.Cart, error) {

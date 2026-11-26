@@ -3,10 +3,10 @@ package handler
 import (
 	"net/http"
 
-	"wholesale-management/internal/carts/dto"
-	"wholesale-management/internal/carts/service"
-	"wholesale-management/internal/platform/middleware"
-	"wholesale-management/internal/platform/response"
+	"distribution-management/internal/carts/dto"
+	"distribution-management/internal/carts/service"
+	"distribution-management/internal/platform/middleware"
+	"distribution-management/internal/platform/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -43,6 +43,8 @@ func (h *CartHandler) GetCart(c *gin.Context) {
 		response.InternalServerError(c, "Failed to load shopping cart")
 		return
 	}
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
 	response.Success(c, http.StatusOK, cart)
 }
 
@@ -59,6 +61,8 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
 	response.Success(c, http.StatusOK, cart)
 }
 
@@ -75,6 +79,8 @@ func (h *CartHandler) UpdateItem(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
 	response.Success(c, http.StatusOK, cart)
 }
 
